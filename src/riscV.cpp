@@ -22,6 +22,12 @@ void riscV::init() {
         //debugging
         if (ch=='#') break;
         if (ch=='@') {
+            if (!count) {
+                for (int i = count-1; i >= 0; --i)
+                    memory[pos]= (memory[pos]<<4) + ((carr[i] <= '9' && carr[i] >= '0') ? carr[i] - '0' : carr[i] - 'A'+10);
+                pos+=1;
+                count=0;
+            }
             pos = 0;
             char c;
             for (int i = 0; i < 8; ++i) {
@@ -44,6 +50,12 @@ void riscV::init() {
             }
         }
     }
+    if (!count) {
+        for (int i = count-1; i >= 0; --i)
+            memory[pos]= (memory[pos]<<4) + ((carr[i] <= '9' && carr[i] >= '0') ? carr[i] - '0' : carr[i] - 'A'+10);
+        pos+=1;
+        count=0;
+    }
 }
 
 riscV::riscV():pc(0) {
@@ -53,7 +65,7 @@ riscV::riscV():pc(0) {
 
 void riscV::runCommand() {
     command.setValue(memory[pc>>2]);
-    if (pc==4244)
+    if (pc==4692)
         std::cout<<"asasdawe2";
     if (memory[pc>>2]==267388179) {
         std::cout<<((reg[10]) & 255u);
@@ -73,8 +85,8 @@ void riscV::runCommand() {
         case 23:
             //AUIPC U-type
             immediate=command.slice(12,31)<<12;
-            if (command.slice(7, 11)) reg[command.slice(7, 11)]= pc + immediate;
             pc+=4;
+            if (command.slice(7, 11)) reg[command.slice(7, 11)]= pc + immediate;
             break;
         case 111:
             //JAL J-type
@@ -139,12 +151,12 @@ void riscV::runCommand() {
                     case 0:
                         //LB
                         t = memory[(reg[command.slice(15, 19)] + immediate) >> 2] & ((1 << 8) - 1);
-                        reg[command.slice(7, 11)] = (t & (1 << 7)) * ((1 << 24) - 1) + t;
+                        reg[command.slice(7, 11)] = ((t & (1 << 7)) * ((1 << 24) - 1)<<1) + t;
                         break;
                     case 1:
                         //LH
                         t = memory[(reg[command.slice(15, 19)] + immediate) >> 2] & ((1 << 16) - 1);
-                        reg[command.slice(7, 11)] = (t & (1 << 15)) * ((1 << 16) - 1) + t;
+                        reg[command.slice(7, 11)] = ((t & (1 << 15)) * ((1 << 16) - 1)<<1) + t;
                         break;
                     case 2:
                         //LW
@@ -300,11 +312,6 @@ void riscV::runCommand() {
             }
             pc+=4;
             break;
-    }
-    if (reg[0]!=0) {
-        std::cout<<"error!";
-        hex(pc,4);
-        exit(0);
     }
 }
 
