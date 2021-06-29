@@ -10,7 +10,7 @@
 class riscV {
 private:
     binaryManager command;
-    unsigned int memory[500000],cache[32],pc;
+    unsigned int memory[500000],reg[32],pc;
 public:
     riscV();
 

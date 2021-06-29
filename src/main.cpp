@@ -1,8 +1,10 @@
 #include <iostream>
-#include "binaryManager.h"
+#include "riscV.h"
+
+riscV riscv;
+
 int main() {
-    binaryManager bm(50);
-    std::cout<<bm[4]<<' '<<bm[5]<<' '<<bm[6]<<'\n';
-    std::cout<<bm.slice(4,5)<<' '<<bm.slice(0,7);
+    riscv.init();
+    riscv.runByOrder();
     return 0;
 }
