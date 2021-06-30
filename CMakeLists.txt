@@ -3,4 +3,4 @@ project(code)
 
 set(CMAKE_CXX_STANDARD 14)
 
-add_executable(code src/main.cpp src/binaryManager.cpp src/riscV.cpp)
+add_executable(code src/main.cpp src/binaryManager.cpp src/riscVRunByOrder.cpp)

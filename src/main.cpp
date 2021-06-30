@@ -1,7 +1,7 @@
 #include <iostream>
-#include "riscV.h"
+#include "riscVRunByOrder.h"
 
-riscV riscv;
+riscVRunByOrder riscv;
 
 int main() {
     riscv.init();

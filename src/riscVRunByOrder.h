@@ -7,7 +7,7 @@
 #include "binaryManager.h"
 #include <cstring>
 #include <iostream>
-class riscV {
+class riscVRunByOrder {
 private:
     binaryManager command;
     unsigned int reg[32],pc;
@@ -15,7 +15,7 @@ private:
 
     unsigned int combineChars(int pos=-1,unsigned char len=4);
 public:
-    riscV();
+    riscVRunByOrder();
 
     //put data into memory
     void init();

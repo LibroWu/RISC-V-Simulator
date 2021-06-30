@@ -2,7 +2,7 @@
 // Created by Libro on 2021/6/28.
 //
 
-#include "riscV.h"
+#include "riscVRunByOrder.h"
 
 void hex(int v,int k){
     if (k==0) {
@@ -17,7 +17,7 @@ unsigned char hexToDec(char c){
     return ((c<='9'&&c>='0')?c-'0':c-'A'+10);
 }
 
-void riscV::init() {
+void riscVRunByOrder::init() {
     std::string s;
     unsigned int pos=0;
     while (std::cin>>s) {
@@ -32,12 +32,12 @@ void riscV::init() {
     }
 }
 
-riscV::riscV():pc(0) {
+riscVRunByOrder::riscVRunByOrder():pc(0) {
     memset(reg, 0, sizeof(reg));
     memset(memory,0,sizeof(memory));
 }
 
-unsigned int riscV::combineChars(int pos,unsigned char len) {
+unsigned int riscVRunByOrder::combineChars(int pos,unsigned char len) {
     unsigned int res=0;
     if (pos==-1) pos=pc;
     for (int i = pos+len-1; i >= pos; --i) {
@@ -46,7 +46,7 @@ unsigned int riscV::combineChars(int pos,unsigned char len) {
     return res;
 }
 
-void riscV::runCommand() {
+void riscVRunByOrder::runCommand() {
     if (combineChars()==267388179) {
         std::cout<<((reg[10]) & 255u);
         exit(0);
@@ -282,6 +282,6 @@ void riscV::runCommand() {
     }
 }
 
-void riscV::runByOrder() {
+void riscVRunByOrder::runByOrder() {
     while (1) runCommand();
 }
