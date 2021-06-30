@@ -13,48 +13,22 @@ void hex(int v,int k){
     hex(v>>4,k-1);
     std::cout<<((t<=9)?char(t+'0'):char('A'+t-10));
 }
+unsigned char hexToDec(char c){
+    return ((c<='9'&&c>='0')?c-'0':c-'A'+10);
+}
 
 void riscV::init() {
-    char ch;
-    char carr[8];
-    unsigned int pos,count=0;
-    while (ch=getchar()){
-        //debugging
-        if (ch=='#') break;
-        if (ch=='@') {
-            if (!count) {
-                for (int i = count-1; i >= 0; --i)
-                    memory[pos]= (memory[pos]<<4) + ((carr[i] <= '9' && carr[i] >= '0') ? carr[i] - '0' : carr[i] - 'A'+10);
-                pos+=1;
-                count=0;
-            }
-            pos = 0;
-            char c;
-            for (int i = 0; i < 8; ++i) {
-                c = getchar();
-                pos = (pos << 4) + ((c <= '9' && c >= '0') ? c - '0' : c - 'A'+10);
-            }
-            pos>>=2;
-        } else if (ch!=' '&& ch!='\n' && ch!='\r'){
-            carr[count++]=ch;
-            if (!(count&1)) {
-                carr[count-2]^=carr[count-1];
-                carr[count-1]^=carr[count-2];
-                carr[count-2]^=carr[count-1];
-            }
-            if (count==8) {
-                for (int i = 7; i >= 0; --i)
-                    memory[pos]= (memory[pos]<<4) + ((carr[i] <= '9' && carr[i] >= '0') ? carr[i] - '0' : carr[i] - 'A'+10);
-                pos+=1;
-                count=0;
-            }
+    std::string s;
+    unsigned int pos=0;
+    while (std::cin>>s) {
+        if (s=="#") break;
+        if (s[0]=='@') {
+            pos=0;
+            for (int i = 1; i <= 8; ++i)
+                pos=(pos<<4)+ hexToDec(s[i]);
+        } else {
+            memory[pos++]= (hexToDec(s[0])<<4)+ hexToDec(s[1]);
         }
-    }
-    if (!count) {
-        for (int i = count-1; i >= 0; --i)
-            memory[pos]= (memory[pos]<<4) + ((carr[i] <= '9' && carr[i] >= '0') ? carr[i] - '0' : carr[i] - 'A'+10);
-        pos+=1;
-        count=0;
     }
 }
 
@@ -63,18 +37,25 @@ riscV::riscV():pc(0) {
     memset(memory,0,sizeof(memory));
 }
 
+unsigned int riscV::combineChars(int pos,unsigned char len) {
+    unsigned int res=0;
+    if (pos==-1) pos=pc;
+    for (int i = pos+len-1; i >= pos; --i) {
+        res=(res<<8)+memory[i];
+    }
+    return res;
+}
+int count=0;
+
 void riscV::runCommand() {
-    command.setValue(memory[pc>>2]);
-    if (pc==4692)
-        std::cout<<"asasdawe2";
-    if (memory[pc>>2]==267388179) {
+    if (combineChars()==267388179) {
         std::cout<<((reg[10]) & 255u);
         exit(0);
     }
-    hex(pc,4);
+    command.setValue(combineChars());
     //run the command
     unsigned int immediate,t,sub_t;
-    int st;
+    unsigned int st;
     switch (command.slice(0,6)) {
         case 55:
             //LUI U-type
@@ -85,8 +66,8 @@ void riscV::runCommand() {
         case 23:
             //AUIPC U-type
             immediate=command.slice(12,31)<<12;
+            if (command.slice(7, 11)) reg[command.slice(7, 11)]= pc +immediate ;
             pc+=4;
-            if (command.slice(7, 11)) reg[command.slice(7, 11)]= pc + immediate;
             break;
         case 111:
             //JAL J-type
@@ -147,30 +128,29 @@ void riscV::runCommand() {
             //I-type
             if (command.slice(7,11)) {
                 immediate = (command[31] * ((1 << 21) - 1) << 11) + command.slice(20, 30);
+                st= reg[command.slice(15, 19)] + immediate;
                 switch (command.slice(12, 14)) {
                     case 0:
                         //LB
-                        t = memory[(reg[command.slice(15, 19)] + immediate) >> 2] & ((1 << 8) - 1);
+                        t = memory[st];
                         reg[command.slice(7, 11)] = ((t & (1 << 7)) * ((1 << 24) - 1)<<1) + t;
                         break;
                     case 1:
                         //LH
-                        t = memory[(reg[command.slice(15, 19)] + immediate) >> 2] & ((1 << 16) - 1);
+                        t= combineChars(st,2);
                         reg[command.slice(7, 11)] = ((t & (1 << 15)) * ((1 << 16) - 1)<<1) + t;
                         break;
                     case 2:
                         //LW
-                        reg[command.slice(7, 11)] = memory[(reg[command.slice(15, 19)] + immediate) >> 2];
+                        reg[command.slice(7, 11)] = combineChars(st,4);
                         break;
                     case 4:
                         //LBU
-                        reg[command.slice(7, 11)] =
-                                memory[(reg[command.slice(15, 19)] + immediate) >> 2] & ((1 << 8) - 1);
+                        reg[command.slice(7, 11)] =memory[st];
                         break;
                     case 5:
                         //LHU
-                        reg[command.slice(7, 11)] =
-                                memory[(reg[command.slice(15, 19)] + immediate) >> 2] & ((1 << 16) - 1);
+                        reg[command.slice(7, 11)] = combineChars(st,2);
                         break;
                 }
             }
@@ -180,38 +160,26 @@ void riscV::runCommand() {
             //S-type
             immediate=(command[31]*((1<<21)-1)<<11)+(command.slice(25,30)<<5)+(command.slice(8,11)<<1)+command[7];
             st= reg[command.slice(15, 19)] + immediate;
-            sub_t=(st&0b11)<<3;
             switch (command.slice(12,14)) {
                 case 0:
                     //SB
-                    memory[st>>2]&=~(0b11111111<<sub_t);
-                    memory[st>>2]^=(reg[command.slice(20, 24)] & 0b11111111) << sub_t;
+                    memory[st]=(reg[command.slice(20, 24)] & 0b11111111);
                     break;
                 case 1:
                     //SH
-                    memory[st>>2]&=~(0b11111111<<sub_t);
-                    memory[st>>2]^=(reg[command.slice(20, 24)] & 0b11111111) << sub_t;
-                    sub_t+=8;
-                    if (sub_t==32) {sub_t=0;t+=4;}
-                    memory[st>>2]&=~(0b11111111<<sub_t);
-                    memory[st>>2]^=((reg[command.slice(20, 24)] >> 8) & 0b11111111) << sub_t;
+                    t=reg[command.slice(20, 24)];
+                    for (int i = st; i < st+2; ++i) {
+                        memory[i]=t& 0b11111111;
+                        t>>=8;
+                    }
                     break;
                 case 2:
                     //SW
-                    memory[st>>2]&=~(0b11111111<<sub_t);
-                    memory[st>>2]^=(reg[command.slice(20, 24)] & 0b11111111) << sub_t;
-                    sub_t+=8;
-                    if (sub_t==32) {sub_t=0;t+=4;}
-                    memory[st>>2]&=~(0b11111111<<sub_t);
-                    memory[st>>2]^=((reg[command.slice(20, 24)] >> 8) & 0b11111111) << sub_t;
-                    sub_t+=8;
-                    if (sub_t==32) {sub_t=0;t+=4;}
-                    memory[st>>2]&=~(0b11111111<<sub_t);
-                    memory[st>>2]^=((reg[command.slice(20, 24)] >> 16) & 0b11111111) << sub_t;
-                    sub_t+=8;
-                    if (sub_t==32) {sub_t=0;t+=4;}
-                    memory[st>>2]&=~(0b11111111<<sub_t);
-                    memory[st>>2]^=((reg[command.slice(20, 24)] >> 24) & 0b11111111) << sub_t;
+                    t=reg[command.slice(20, 24)];
+                    for (int i = st; i < st+4; ++i) {
+                        memory[i]=t & 0b11111111;
+                        t>>=8;
+                    }
                     break;
             }
             pc+=4;
@@ -227,7 +195,7 @@ void riscV::runCommand() {
                         break;
                     case 1:
                         //SLLI
-                        reg[command.slice(7, 11)] <<= command.slice(20, 24);
+                        reg[command.slice(7, 11)] =reg[command.slice(15,19)]<< command.slice(20, 24);
                         break;
                     case 2:
                         //SLTI

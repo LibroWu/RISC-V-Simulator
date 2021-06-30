@@ -10,7 +10,10 @@
 class riscV {
 private:
     binaryManager command;
-    unsigned int memory[500000],reg[32],pc;
+    unsigned int reg[32],pc;
+    unsigned char memory[500000];
+
+    unsigned int combineChars(int pos=-1,unsigned char len=4);
 public:
     riscV();
 
