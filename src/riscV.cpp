@@ -45,7 +45,6 @@ unsigned int riscV::combineChars(int pos,unsigned char len) {
     }
     return res;
 }
-int count=0;
 
 void riscV::runCommand() {
     if (combineChars()==267388179) {
