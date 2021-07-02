@@ -65,8 +65,8 @@ void riscVRunByOrder::runCommand() {
         case 23:
             //AUIPC U-type
             immediate=command.slice(12,31)<<12;
-            pc +=immediate;
-            if (command.slice(7, 11)) reg[command.slice(7, 11)]= pc ;
+            if (command.slice(7, 11)) reg[command.slice(7, 11)]= pc +immediate;
+            pc +=4;
             break;
         case 111:
             //JAL J-type

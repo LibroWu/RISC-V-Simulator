@@ -5,9 +5,10 @@
 #include "Operator.h"
 
 void baseOperator::setValue(unsigned char opCode, unsigned char Func3, unsigned char Func7, unsigned int Immediate,
-                            unsigned int Npc) {
+                            unsigned int Npc,OpType type) {
     opcode=opCode,func3=Func3,func7=Func7;
     immediate=Immediate,npc=Npc;
+    opType=type;
 }
 
 void RtypeOperator::operate(unsigned int &reg_rd, unsigned int reg_rs1, unsigned int reg_rs2) {
@@ -26,7 +27,7 @@ void RtypeOperator::operate(unsigned int &reg_rd, unsigned int reg_rs1, unsigned
 void UtypeOperator::operate(unsigned int &reg_rd, unsigned int reg_rs1, unsigned int reg_rs2) {
     switch (opcode) {
         case 55: reg_rd=immediate;break;
-        case 23: reg_rd=npc=npc+immediate;break;
+        case 23: reg_rd=npc+immediate;npc+=immediate;break;
     }
 }
 

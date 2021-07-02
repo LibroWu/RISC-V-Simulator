@@ -33,49 +33,132 @@ private:
             memset(Q,0, sizeof(Q));
         }
 
-        unsigned int operator[](int pos) {
+        unsigned int& operator[](int pos) {
             return reg[pos];
+        }
+
+        unsigned int& operator()(int pos) {
+            return Q[pos];
+        }
+    };
+
+    template<class T,unsigned int len=QUEUE_SIZE>
+    class loopQueue{
+    private:
+        int head,tail;
+        //1 for full,-1 for empty, others 0
+        char status;
+        T que[len];
+    public:
+        loopQueue():head(0),tail(0),status(-1){}
+
+        char getStatus(){
+            return status;
+        }
+
+        int push(const T& t){
+            que[tail++]=t;
+            if (tail==len) tail=0;
+            if (status==-1) status=0;
+            if (tail==head) status=1;
+            return tail-1;
+        }
+
+        void pop(){
+            if (++head==len) head=0;
+            if (status==1) status=0;
+            if (head==tail) status=-1;
+        }
+
+        T& getFront(){
+            return que[head];
+        }
+
+        T& operator[](int pos) {
+            return que[pos];
         }
     };
 
     struct ROB_Node{
         unsigned int value;
+        int linkToRs,linkToReg;
         bool  hasValue;
         ROB_Node():hasValue(0){}
     };
 
     class ROB{
     private:
-        ROB_Node* robQue;
-        int head,tail,rsPos;
+        loopQueue<ROB_Node> robQue;
     public:
         bool isFull(){}
-
-        ROB(): head(0), tail(0), robQue(new ROB_Node[QUEUE_SIZE]){}
-
-        ~ROB(){
-            delete [] robQue;
-        }
+        void update(){}
+        int reserve(){}
     };
 
     struct RS_Node{
         bool busy;
-        int id,Q1,Q2;
+        int id,Q1,Q2,next;
         unsigned int V1,V2;
         baseOperator* opPtr;
+
+        RS_Node():busy(0),opPtr(nullptr){}
+    };
+
+    struct SLBufferNode{
+
+    };
+
+    struct SLBuffer{
+
+        void update(){}
     };
 
     struct RS{
         unsigned int _;
+        int head;
         RS_Node rsQue[QUEUE_SIZE];
-        bool isFull(){}
+        char RS_status;
+        RS():head(0){
+            for (int i = 0; i < QUEUE_SIZE; ++i) {
+                rsQue[i].next=i+1;
+            }
+        }
+        //scan the whole station and return the command which is ready for execution
+        int scan(){}
+
+        void update(){}
     };
+
+    //result buffer
+    struct IssueResult{
+        bool hasResult;
+        baseOperator* basePtr;
+        unsigned int Q1,Q2,V1,V2,id;
+    };
+
+    struct ExResult{
+
+    };
+
+    struct CommitResult{
+
+    };
+
+
+
+
 private:
     //private variable
     unsigned int pc;
     unsigned char* memory;
     regFile regPre,regNext;
-    unsigned int instFetchQue[QUEUE_SIZE];
+    loopQueue<unsigned int> instFetchQue;
+    //switches
+    bool RS_is_stall;
+
+    IssueResult issueResult;
+    ROB rob;
+    RS rs;
 public:
 	simulator(){
         memory=new unsigned char [mem_size];
@@ -105,7 +188,7 @@ public:
             */
             run_rob();
             if(code_from_rob_to_commit == 0x0ff00513){
-                std::cout << std::dec << ((unsigned int)reg_prev[10] & 255u);
+                std::cout << std::dec << ((unsigned int)regPre[10] & 255u);
                 break;
             }
             run_slbuffer();
@@ -116,9 +199,7 @@ public:
             run_ex();
             run_issue();
             run_commit();
-            update();
         }
-
 	}
 
     void run_inst_fetch_queue(){
@@ -130,7 +211,10 @@ public:
         tips: 考虑边界问题（满/空...）
         */
         //todo:branch predict
-
+        if (instFetchQue.getStatus()!=1) {
+            instFetchQue.push(combineChars(pc));
+            pc += 4;
+        }
     }
 
     void run_issue(){
@@ -145,50 +229,94 @@ public:
         3. 对于 Load/Store指令，将指令分解后发到SLBuffer(需注意SLBUFFER也该是个先进先出的队列实现)
         tips: 考虑边界问题（是否还有足够的空间存放下一条指令）
         */
-        //todo set the command
-        binaryManager command;
-        command.setValue(0);
-        unsigned int immediate,npc=pc;
-        unsigned char opcode= command.slice(0,6),func3=0,func7=0,rd=0,rs1=0,rs2=0;
-        //ID
-        switch (opcode) {
-            case 55:case 23:
-                //LUI U-type
-                //AUIPC U-type
-                immediate=command.slice(12,31)<<12;break;
-            case 111:
-                //JAL J-type
-                immediate=(command[31]*((1<<12)-1)<<20)+(command.slice(12,19)<<12)+(command[20]<<11)+(command.slice(25,30)<<5)+(command.slice(21,24)<<1);break;
-            case 103:
-                //JALR I-type
-                immediate=(command[31]*((1<<21)-1)<<11)+command.slice(20,30);break;
-            case 99:
-                //B-type
-                immediate=(command[31]*((1<<20)-1)<<12)+(command[7]<<11)+(command.slice(25,30)<<5)+(command.slice(8,11)<<1);
-                func3=command.slice(12,14);
-                rs1=command.slice(15,19);
-                rs2=command.slice(20,24);
-                break;
-            case 3:case 19:
-                //I-type
-                func3=command.slice(12,14);
-                immediate = (command[31] * ((1 << 21) - 1) << 11) + command.slice(20, 30);
-                rd=command.slice(7, 11);
-                break;
-            case 35:
-                //S-type
-                immediate=(command[31]*((1<<21)-1)<<11)+(command.slice(25,30)<<5)+(command.slice(8,11)<<1)+command[7];
-                func3=command.slice(12,14);
-                rs1=command.slice(15,19);
-                break;
-            case 51:
-                //R-type
-                rd=command.slice(7,11);
-                rs1=command.slice(15,19);
-                rs2=command.slice(20,24);
-                func3=command.slice(12,14);
-                func7=command.slice(25,31);
-                break;
+        if (instFetchQue.getStatus()!=0 && rs.head!=QUEUE_SIZE) {
+            //set the command
+            binaryManager command;
+            command.setValue(instFetchQue.getFront());
+            instFetchQue.pop();
+            //ID
+            unsigned int immediate, npc = pc;
+            unsigned char opcode = command.slice(0, 6), func3 = 0, func7 = 0;
+            char rd = -1, rs1 = -1, rs2 = -1;
+            baseOperator *basePtr;
+            OpType Type;
+            switch (opcode) {
+                case 55:
+                case 23:
+                    //LUI U-type
+                    //AUIPC U-type
+                    immediate = command.slice(12, 31) << 12;
+                    basePtr = new UtypeOperator;
+                    Type=U;
+                    break;
+                case 111:
+                    //JAL J-type
+                    immediate = (command[31] * ((1 << 12) - 1) << 20) + (command.slice(12, 19) << 12) +
+                                (command[20] << 11) + (command.slice(25, 30) << 5) + (command.slice(21, 24) << 1);
+                    basePtr = new JtypeOperator;
+                    Type=J;
+                    break;
+                case 99:
+                    //B-type
+                    immediate =
+                            (command[31] * ((1 << 20) - 1) << 12) + (command[7] << 11) + (command.slice(25, 30) << 5) +
+                            (command.slice(8, 11) << 1);
+                    func3 = command.slice(12, 14);
+                    rs1 = command.slice(15, 19);
+                    rs2 = command.slice(20, 24);
+                    basePtr = new BtypeOperator;
+                    Type=B;
+                    break;
+                case 3:
+                case 19:
+                case 103:
+                    //I-type
+                    //JALR I-type
+                    func3 = command.slice(12, 14);
+                    immediate = (command[31] * ((1 << 21) - 1) << 11) + command.slice(20, 30);
+                    rd = command.slice(7, 11);
+                    rs1 = command.slice(15, 19);
+                    basePtr = new ItypeOperator;
+                    Type=I;
+                    break;
+                case 35:
+                    //S-type
+                    immediate = (command[31] * ((1 << 21) - 1) << 11) + (command.slice(25, 30) << 5) +
+                                (command.slice(8, 11) << 1) + command[7];
+                    func3 = command.slice(12, 14);
+                    rs1 = command.slice(15, 19);
+                    basePtr = new StypeOperator;
+                    Type=S;
+                    break;
+                case 51:
+                    //R-type
+                    rd = command.slice(7, 11);
+                    rs1 = command.slice(15, 19);
+                    rs2 = command.slice(20, 24);
+                    func3 = command.slice(12, 14);
+                    func7 = command.slice(25, 31);
+                    basePtr = new RtypeOperator;
+                    Type=R;
+                    break;
+            }
+            basePtr->setValue(opcode, func3, func7, immediate, npc,Type);
+            issueResult.hasResult= true;
+            issueResult.basePtr=basePtr;
+            if (rd!=-1) {
+                regNext(rd);
+            }
+            if (rs1!=-1) {
+
+            } else {
+
+            }
+            if (rs2!=-1) {
+
+            } else {
+
+            }
+        } else {
+            issueResult.hasResult= false;
         }
     }
 
@@ -259,6 +387,7 @@ public:
         在这一部分你需要完成的工作：
         对于模拟中未完成同步的变量（即同时需记下两个周期的新/旧信息的变量）,进行数据更新。
         */
+        regPre=regNext;
     }
 	~simulator(){delete [] memory;} 
 };
