@@ -26,11 +26,13 @@ public:
 
 class ItypeOperator:public baseOperator{
 public:
+    unsigned char getFunc3();
     virtual void operate(unsigned int& reg_rd,unsigned int reg_rs1,unsigned int reg_rs2) override;
 };
 
 class StypeOperator:public baseOperator{
 public:
+    unsigned char getFunc3();
     virtual void operate(unsigned int& reg_rd,unsigned int reg_rs1,unsigned int reg_rs2) override;
 };
 

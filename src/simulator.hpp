@@ -26,7 +26,8 @@ private:
 private:
     //private struct&class define
     struct regFile{
-        unsigned int reg[32],Q[32];
+        unsigned int reg[32];
+        int Q[32];
 
         regFile(){
             memset(reg,0,sizeof(reg));
@@ -37,7 +38,7 @@ private:
             return reg[pos];
         }
 
-        unsigned int& operator()(int pos) {
+        int& operator()(int pos) {
             return Q[pos];
         }
     };
@@ -50,6 +51,18 @@ private:
         char status;
         T que[len];
     public:
+
+        int reserve(){
+            int preTail=tail;
+            tail++;
+            if (tail==len) tail=0;
+            if (status==-1) status=0;
+            if (tail==head) status=1;
+            return preTail;
+        }
+
+        int getTail(){return tail;}
+
         loopQueue():head(0),tail(0),status(-1){}
 
         char getStatus(){
@@ -57,11 +70,12 @@ private:
         }
 
         int push(const T& t){
+            int prePail=tail;
             que[tail++]=t;
             if (tail==len) tail=0;
             if (status==-1) status=0;
             if (tail==head) status=1;
-            return tail-1;
+            return prePail;
         }
 
         void pop(){
@@ -88,56 +102,126 @@ private:
 
     class ROB{
     private:
-        loopQueue<ROB_Node> robQue;
+        loopQueue<ROB_Node> preQue,nextQue;
     public:
-        bool isFull(){}
+        bool isFull(){
+            return nextQue.getStatus()==1;
+        }
+        void update(){
+            preQue=nextQue;
+        }
+        int getPos(){
+            return preQue.getTail();
+        }
+        int reserve(){
+            return nextQue.reserve();
+        }
+        ROB_Node& operator[](int pos) {
+            return preQue[pos];
+        }
+        ROB_Node& operator()(int pos) {
+            return nextQue[pos];
+        }
+
+    };
+
+    struct SLBufferNode{
+        char exCount;
+        baseOperator* basePtr;
+        
+        SLBufferNode():exCount(0){}
+    };
+
+    struct SLBuffer{
+        loopQueue<SLBufferNode> preQue,nextQue;
         void update(){}
-        int reserve(){}
+
+        bool isFull(){return preQue.getStatus()==1;}
+
+        bool isEmpty(){return preQue.getStatus()==-1;}
+
+        SLBufferNode& operator[](int pos) {return preQue[pos];}
+
+        SLBufferNode& operator()(int pos) {return nextQue[pos];}
     };
 
     struct RS_Node{
-        bool busy;
+        bool busy,hasEx;
         int id,Q1,Q2,next;
         unsigned int V1,V2;
         baseOperator* opPtr;
 
-        RS_Node():busy(0),opPtr(nullptr){}
-    };
+        RS_Node():busy(0),hasEx(false),opPtr(nullptr){}
 
-    struct SLBufferNode{
+        void setValue(bool Busy,int Id,int QI,int QII,unsigned int VI,unsigned int VII,baseOperator* OpPtr){
+            busy=Busy,id=Id,Q1=QI,Q2=QII,V1=VI,V2=VII,opPtr=OpPtr;
+        }
 
-    };
-
-    struct SLBuffer{
-
-        void update(){}
+        bool canEx(){
+            return (Q1==0 && Q2==0);
+        }
     };
 
     struct RS{
-        unsigned int _;
-        int head;
-        RS_Node rsQue[QUEUE_SIZE];
-        char RS_status;
-        RS():head(0){
-            for (int i = 0; i < QUEUE_SIZE; ++i) {
-                rsQue[i].next=i+1;
+        struct ResultBuffer{
+            int head;
+            RS_Node rsQue[QUEUE_SIZE];
+            ResultBuffer():head(0){
+                for (int i = 0; i < QUEUE_SIZE; ++i) rsQue[i].next=i+1;
             }
-        }
-        //scan the whole station and return the command which is ready for execution
-        int scan(){}
+        } preBuffer,nextBuffer;
 
-        void update(){}
+        int exNum;
+
+        //scan the whole station and return the command which is ready for execution
+        int scan(){
+            for (int j = 0; j < QUEUE_SIZE; ++j)
+                if (preBuffer.rsQue[j].busy && preBuffer.rsQue[j].canEx()){
+                    remove(j);
+                    return j;
+            }
+            return -1;
+        }
+
+        void update(){
+            preBuffer=nextBuffer;
+        }
+
+        void insert(const RS_Node& rsNode) {
+            int next=nextBuffer.rsQue[nextBuffer.head].next;
+            nextBuffer.rsQue[nextBuffer.head]=rsNode;
+            nextBuffer.head=next;
+        }
+
+        void remove(int pos){
+            nextBuffer.rsQue[pos].busy= false;
+            nextBuffer.rsQue[pos].next=nextBuffer.head;
+            nextBuffer.head=pos;
+        }
+
+        //get the value in pre
+        RS_Node& operator[](int pos) {
+            return preBuffer.rsQue[pos];
+        }
+
+        //get the value in next
+        RS_Node& operator()(int pos) {
+            return nextBuffer.rsQue[pos];
+        }
+
     };
 
     //result buffer
     struct IssueResult{
         bool hasResult;
-        baseOperator* basePtr;
-        unsigned int Q1,Q2,V1,V2,id;
+        RS_Node rsNode;
+        bool toRS,toSLBuffer;
     };
 
     struct ExResult{
-
+        bool hasResult;
+        unsigned int value;
+        int posROB;
     };
 
     struct CommitResult{
@@ -152,13 +236,15 @@ private:
     unsigned int pc;
     unsigned char* memory;
     regFile regPre,regNext;
-    loopQueue<unsigned int> instFetchQue;
+    loopQueue<unsigned int> preFetchQue,nextFetchQue;
     //switches
     bool RS_is_stall;
 
     IssueResult issueResult;
+    ExResult exResult;
     ROB rob;
     RS rs;
+    SLBuffer slBuffer;
 public:
 	simulator(){
         memory=new unsigned char [mem_size];
@@ -183,7 +269,7 @@ public:
         while(true){
             /*在这里使用了两阶段的循环部分：
               1. 实现时序电路部分，即在每个周期初同步更新的信息。
-              2. 实现逻辑电路部分，即在每个周期中如ex、issue的部分
+              2. 实现组合电路部分，即在每个周期中如ex、issue的部分
               已在下面给出代码
             */
             run_rob();
@@ -193,6 +279,7 @@ public:
             }
             run_slbuffer();
             run_reservation();
+            run_regfile();
             run_inst_fetch_queue();
             update();
 
@@ -211,8 +298,8 @@ public:
         tips: 考虑边界问题（满/空...）
         */
         //todo:branch predict
-        if (instFetchQue.getStatus()!=1) {
-            instFetchQue.push(combineChars(pc));
+        if (nextFetchQue.getStatus()!=1) {
+            nextFetchQue.push(combineChars(pc));
             pc += 4;
         }
     }
@@ -221,7 +308,7 @@ public:
         /*
         在这一部分你需要完成的工作：
         1. 从run_inst_fetch_queue()中得到issue的指令
-        2. 对于issue的所有类型的指令向ROB申请一个位置（或者也可以通过ROB预留位置），并修改regfile中相应的值
+        2. 对于issue的所有类型的指令向ROB申请一个位置（或者也可以通过ROB预留位置），并通知regfile修改相应的值
         2. 对于 非 Load/Store的指令，将指令进行分解后发到Reservation Station
           tip: 1. 这里需要考虑怎么得到rs1、rs2的值，并考虑如当前rs1、rs2未被计算出的情况，参考书上内容进行处理
                2. 在本次作业中，我们认为相应寄存器的值已在ROB中存储但尚未commit的情况是可以直接获得的，即你需要实现这个功能
@@ -229,25 +316,28 @@ public:
         3. 对于 Load/Store指令，将指令分解后发到SLBuffer(需注意SLBUFFER也该是个先进先出的队列实现)
         tips: 考虑边界问题（是否还有足够的空间存放下一条指令）
         */
-        if (instFetchQue.getStatus()!=0 && rs.head!=QUEUE_SIZE) {
+        //todo: stall situation
+        if (preFetchQue.getStatus()!=0) {
             //set the command
             binaryManager command;
-            command.setValue(instFetchQue.getFront());
-            instFetchQue.pop();
+            command.setValue(preFetchQue.getFront());
+            preFetchQue.pop();
             //ID
-            unsigned int immediate, npc = pc;
+            int Q1,Q2;
+            unsigned int immediate, npc = pc,V1,V2;
             unsigned char opcode = command.slice(0, 6), func3 = 0, func7 = 0;
             char rd = -1, rs1 = -1, rs2 = -1;
+            issueResult.toRS=issueResult.toSLBuffer= false;
             baseOperator *basePtr;
             OpType Type;
             switch (opcode) {
-                case 55:
-                case 23:
+                case 55:case 23:
                     //LUI U-type
                     //AUIPC U-type
                     immediate = command.slice(12, 31) << 12;
                     basePtr = new UtypeOperator;
                     Type=U;
+                    issueResult.toRS= true;
                     break;
                 case 111:
                     //JAL J-type
@@ -301,22 +391,29 @@ public:
             }
             basePtr->setValue(opcode, func3, func7, immediate, npc,Type);
             issueResult.hasResult= true;
-            issueResult.basePtr=basePtr;
-            if (rd!=-1) {
-                regNext(rd);
-            }
+            int posROB=rob.reserve();
+            if (rd!=-1 && rd!=0) regNext(rd)=posROB;
             if (rs1!=-1) {
-
-            } else {
-
+                if ((Q1=regPre(rs1))==0) V1=regPre[rs1];
+                else if (rob[Q1].hasValue) {
+                    Q1=0;
+                    V1=rob[Q1].value;
+                }
             }
+            else Q1=0;
             if (rs2!=-1) {
-
-            } else {
-
+                if ((Q2=regPre(rs2))==0) V2=regPre[rs2];
+                else if (rob[Q2].hasValue) {
+                    Q2=0;
+                    V2=rob[Q2].value;
+                }
             }
+            else Q2=0;
+            issueResult.rsNode.setValue(true,posROB,Q1,Q2,V1,V2,basePtr);
+            if (opcode==35 || opcode==3) issueResult.toSLBuffer= true;
+            else issueResult.toRS = true;
         } else {
-            issueResult.hasResult= false;
+            issueResult.hasResult = false;
         }
     }
 
@@ -328,6 +425,15 @@ public:
         3. 从Reservation Station或者issue进来的指令中选择一条可计算的发送给EX进行计算
         4. 根据上个周期EX阶段或者SLBUFFER的计算得到的结果遍历Reservation Station，更新相应的值
         */
+        //todo run issue directly
+        if (issueResult.hasResult && issueResult.toRS) {
+            if (issueResult.rsNode.canEx()) rs.exNum=-2;
+            else {
+                rs.exNum = rs.scan();
+                rs.insert(issueResult.rsNode);
+            }
+        }
+        //todo update with the result of ex or slbuffer
     }
 
     void run_ex(){
@@ -337,6 +443,20 @@ public:
         tips: 考虑如何处理跳转指令并存储相关信息
               Store/Load的指令并不在这一部分进行处理
         */
+        if (rs.exNum==-1) {
+            exResult.hasResult=false;
+            return;
+        }
+        exResult.hasResult= true;
+        if (rs.exNum==-2) {
+            RS_Node &tmp=issueResult.rsNode;
+            exResult.posROB=tmp.id;
+            tmp.opPtr->operate(exResult.value,tmp.V1,tmp.V2);
+        } else {
+            RS_Node &tmp=rs[rs.exNum];
+            exResult.posROB=tmp.id;
+            tmp.opPtr->operate(exResult.value,tmp.V1,tmp.V2);
+        }
     }
 
     void run_slbuffer(){
@@ -354,14 +474,28 @@ public:
            也可以考虑分成两个模块，该部分的实现只需判断队首的指令是否能执行并根据指令相应执行即可。
 
         2. 1）SLB每个周期会查看队头，若队头指令还未ready，则阻塞。
-           
+
            2）当队头ready且是load指令时，SLB会直接执行load指令，包括计算地址和读内存，
            然后把结果通知ROB，同时将队头弹出。ROB commit到这条指令时通知Regfile写寄存器。
-           
+
            3）当队头ready且是store指令时，SLB会等待ROB的commit，commit之后会SLB执行这
            条store指令，包括计算地址和写内存，写完后将队头弹出。
+
+           4）同时SLBUFFER还需根据上个周期EX和SLBUFFER的计算结果遍历SLBUFFER进行数据的更新。
         */
         //todo: method 2
+        if (issueResult.hasResult && issueResult.toSLBuffer) {
+            if (slBuffer.isFull()) {
+
+            } else {
+                if (slBuffer.isEmpty()){
+                    //try run issue
+                } else {
+
+                }
+                slBuffer.insert();
+            }
+        }
     }
 
     void run_rob(){
@@ -372,12 +506,23 @@ public:
         2. 根据EX阶段和SLBUFFER的计算得到的结果，遍历ROB，更新ROB中的值
         3. 对于队首的指令，如果已经完成计算及更新，进行commit
         */
+        if (exResult.hasResult) {
+
+        }
+        //todo commit
+    }
+
+    void run_regfile(){
+        /*
+        每个寄存器会记录Q和V，含义参考ppt。这一部分会进行写寄存器，内容包括：根据issue和commit的通知修改对应寄存器的Q和V。
+        tip: 请注意issue和commit同一个寄存器时的情况
+        */
     }
 
     void run_commit(){
         /*
         在这一部分你需要完成的工作：
-        1. 根据ROB发出的信息更新寄存器的值，包括对应的ROB和是否被占用状态（注意考虑issue和commit同一个寄存器的情况）
+        1. 根据ROB发出的信息通知regfile修改相应的值，包括对应的ROB和是否被占用状态（注意考虑issue和commit同一个寄存器的情况）
         2. 遇到跳转指令更新pc值，并发出信号清空所有部分的信息存储（这条对于很多部分都有影响，需要慎重考虑）
         */
     }
@@ -387,9 +532,13 @@ public:
         在这一部分你需要完成的工作：
         对于模拟中未完成同步的变量（即同时需记下两个周期的新/旧信息的变量）,进行数据更新。
         */
-        regPre=regNext;
+        regPre = regNext;
+        preFetchQue = nextFetchQue;
+        rs.update();
+        slBuffer.update();
+        rob.update();
     }
-	~simulator(){delete [] memory;} 
+	~simulator(){delete [] memory;}
 };
 
 #endif

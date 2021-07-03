@@ -51,6 +51,8 @@ void ItypeOperator::operate(unsigned int &reg_rd, unsigned int reg_rs1, unsigned
     unsigned int t;
     switch (opcode) {
         case 3:
+            //figure out the address
+            reg_rd=reg_rs1+immediate;
             break;
         case 19:
             switch (func3) {
@@ -73,5 +75,10 @@ void ItypeOperator::operate(unsigned int &reg_rd, unsigned int reg_rs1, unsigned
 }
 
 void StypeOperator::operate(unsigned int &reg_rd, unsigned int reg_rs1, unsigned int reg_rs2) {
-    
+    //figure out the address
+    reg_rd=reg_rs1+immediate;
 }
+
+unsigned char StypeOperator::getFunc3() {return func3;}
+
+unsigned char ItypeOperator::getFunc3() {return func3;}
