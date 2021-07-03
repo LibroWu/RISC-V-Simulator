@@ -8,235 +8,243 @@
 
 const int QUEUE_SIZE = 32;
 const int mem_size = 4194304;
-class simulator{
+
+class simulator {
 private:
     //private function
-    unsigned char hexToDec(char c){
-        return ((c<='9'&&c>='0')?c-'0':c-'A'+10);
+    unsigned char hexToDec(char c) {
+        return ((c <= '9' && c >= '0') ? c - '0' : c - 'A' + 10);
     }
 
-    unsigned int combineChars(int pos=-1,unsigned char len=4){
-        unsigned int res=0;
-        if (pos==-1) pos=pc;
-        for (int i = pos+len-1; i >= pos; --i) {
-            res=(res<<8)+memory[i];
+    unsigned int combineChars(int pos = -1, unsigned char len = 4) {
+        unsigned int res = 0;
+        if (pos == -1) pos = pc;
+        for (int i = pos + len - 1; i >= pos; --i) {
+            res = (res << 8) + memory[i];
         }
         return res;
     }
+
 private:
     //private struct&class define
-    struct regFile{
+    struct regFile {
         unsigned int reg[32];
         int Q[32];
 
-        regFile(){
-            memset(reg,0,sizeof(reg));
-            memset(Q,0, sizeof(Q));
+        regFile() {
+            memset(reg, 0, sizeof(reg));
+            memset(Q, 0, sizeof(Q));
         }
 
-        unsigned int& operator[](int pos) {
+        unsigned int &operator[](int pos) {
             return reg[pos];
         }
 
-        int& operator()(int pos) {
+        int &operator()(int pos) {
             return Q[pos];
         }
     };
 
-    template<class T,unsigned int len=QUEUE_SIZE>
-    class loopQueue{
+    template<class T, unsigned int len = QUEUE_SIZE>
+    class loopQueue {
     private:
-        int head,tail;
+        int head, tail;
         //1 for full,-1 for empty, others 0
         char status;
         T que[len];
     public:
 
-        int reserve(){
-            int preTail=tail;
+        int reserve() {
+            int preTail = tail;
             tail++;
-            if (tail==len) tail=0;
-            if (status==-1) status=0;
-            if (tail==head) status=1;
+            if (tail == len) tail = 0;
+            if (status == -1) status = 0;
+            if (tail == head) status = 1;
             return preTail;
         }
 
-        int getTail(){return tail;}
+        int getTail() { return tail; }
 
-        loopQueue():head(0),tail(0),status(-1){}
+        loopQueue() : head(0), tail(0), status(-1) {}
 
-        char getStatus(){
+        char getStatus() {
             return status;
         }
 
-        int push(const T& t){
-            int prePail=tail;
-            que[tail++]=t;
-            if (tail==len) tail=0;
-            if (status==-1) status=0;
-            if (tail==head) status=1;
+        int push(const T &t) {
+            int prePail = tail;
+            que[tail++] = t;
+            if (tail == len) tail = 0;
+            if (status == -1) status = 0;
+            if (tail == head) status = 1;
             return prePail;
         }
 
-        void pop(){
-            if (++head==len) head=0;
-            if (status==1) status=0;
-            if (head==tail) status=-1;
+        void pop() {
+            if (++head == len) head = 0;
+            if (status == 1) status = 0;
+            if (head == tail) status = -1;
         }
 
-        T& getFront(){
+        T &getFront() {
             return que[head];
         }
 
-        T& operator[](int pos) {
+        T &operator[](int pos) {
             return que[pos];
         }
     };
 
-    struct ROB_Node{
+    struct ROB_Node {
         unsigned int value;
-        int linkToRs,linkToReg;
-        bool  hasValue;
-        ROB_Node():hasValue(0){}
+        int linkToRs, linkToReg;
+        bool hasValue;
+
+        ROB_Node() : hasValue(0) {}
     };
 
-    class ROB{
+    class ROB {
     private:
-        loopQueue<ROB_Node> preQue,nextQue;
+        loopQueue<ROB_Node> preQue, nextQue;
     public:
-        bool isFull(){
-            return nextQue.getStatus()==1;
+        bool isFull() {
+            return nextQue.getStatus() == 1;
         }
-        void update(){
-            preQue=nextQue;
+
+        void update() {
+            preQue = nextQue;
         }
-        int getPos(){
+
+        int getPos() {
             return preQue.getTail();
         }
-        int reserve(){
+
+        int reserve() {
             return nextQue.reserve();
         }
-        ROB_Node& operator[](int pos) {
+
+        ROB_Node &operator[](int pos) {
             return preQue[pos];
         }
-        ROB_Node& operator()(int pos) {
+
+        ROB_Node &operator()(int pos) {
             return nextQue[pos];
         }
 
     };
 
-    struct SLBufferNode{
+    struct SLBufferNode {
         char exCount;
-        baseOperator* basePtr;
-        
-        SLBufferNode():exCount(0){}
+        baseOperator *basePtr;
+
+        SLBufferNode() : exCount(0) {}
     };
 
-    struct SLBuffer{
-        loopQueue<SLBufferNode> preQue,nextQue;
-        void update(){}
+    struct SLBuffer {
+        loopQueue<SLBufferNode> preQue, nextQue;
 
-        bool isFull(){return preQue.getStatus()==1;}
+        void update() {}
 
-        bool isEmpty(){return preQue.getStatus()==-1;}
+        bool isFull() { return preQue.getStatus() == 1; }
 
-        SLBufferNode& operator[](int pos) {return preQue[pos];}
+        bool isEmpty() { return preQue.getStatus() == -1; }
 
-        SLBufferNode& operator()(int pos) {return nextQue[pos];}
+        SLBufferNode &operator[](int pos) { return preQue[pos]; }
+
+        SLBufferNode &operator()(int pos) { return nextQue[pos]; }
     };
 
-    struct RS_Node{
-        bool busy,hasEx;
-        int id,Q1,Q2,next;
-        unsigned int V1,V2;
-        baseOperator* opPtr;
+    struct RS_Node {
+        bool busy, hasEx;
+        int id, Q1, Q2, next;
+        unsigned int V1, V2;
+        baseOperator *opPtr;
 
-        RS_Node():busy(0),hasEx(false),opPtr(nullptr){}
+        RS_Node() : busy(0), hasEx(false), opPtr(nullptr) {}
 
-        void setValue(bool Busy,int Id,int QI,int QII,unsigned int VI,unsigned int VII,baseOperator* OpPtr){
-            busy=Busy,id=Id,Q1=QI,Q2=QII,V1=VI,V2=VII,opPtr=OpPtr;
+        void setValue(bool Busy, int Id, int QI, int QII, unsigned int VI, unsigned int VII, baseOperator *OpPtr) {
+            busy = Busy, id = Id, Q1 = QI, Q2 = QII, V1 = VI, V2 = VII, opPtr = OpPtr;
         }
 
-        bool canEx(){
-            return (Q1==0 && Q2==0);
+        bool canEx() {
+            return (Q1 == 0 && Q2 == 0);
         }
     };
 
-    struct RS{
-        struct ResultBuffer{
+    struct RS {
+        struct ResultBuffer {
             int head;
             RS_Node rsQue[QUEUE_SIZE];
-            ResultBuffer():head(0){
-                for (int i = 0; i < QUEUE_SIZE; ++i) rsQue[i].next=i+1;
+
+            ResultBuffer() : head(0) {
+                for (int i = 0; i < QUEUE_SIZE; ++i) rsQue[i].next = i + 1;
             }
-        } preBuffer,nextBuffer;
+        } preBuffer, nextBuffer;
 
         int exNum;
 
         //scan the whole station and return the command which is ready for execution
-        int scan(){
+        int scan() {
             for (int j = 0; j < QUEUE_SIZE; ++j)
-                if (preBuffer.rsQue[j].busy && preBuffer.rsQue[j].canEx()){
+                if (preBuffer.rsQue[j].busy && preBuffer.rsQue[j].canEx()) {
                     remove(j);
                     return j;
-            }
+                }
             return -1;
         }
 
-        void update(){
-            preBuffer=nextBuffer;
+        void update() {
+            preBuffer = nextBuffer;
         }
 
-        void insert(const RS_Node& rsNode) {
-            int next=nextBuffer.rsQue[nextBuffer.head].next;
-            nextBuffer.rsQue[nextBuffer.head]=rsNode;
-            nextBuffer.head=next;
+        void insert(const RS_Node &rsNode) {
+            int next = nextBuffer.rsQue[nextBuffer.head].next;
+            nextBuffer.rsQue[nextBuffer.head] = rsNode;
+            nextBuffer.head = next;
         }
 
-        void remove(int pos){
-            nextBuffer.rsQue[pos].busy= false;
-            nextBuffer.rsQue[pos].next=nextBuffer.head;
-            nextBuffer.head=pos;
+        void remove(int pos) {
+            nextBuffer.rsQue[pos].busy = false;
+            nextBuffer.rsQue[pos].next = nextBuffer.head;
+            nextBuffer.head = pos;
         }
 
         //get the value in pre
-        RS_Node& operator[](int pos) {
+        RS_Node &operator[](int pos) {
             return preBuffer.rsQue[pos];
         }
 
         //get the value in next
-        RS_Node& operator()(int pos) {
+        RS_Node &operator()(int pos) {
             return nextBuffer.rsQue[pos];
         }
 
     };
 
     //result buffer
-    struct IssueResult{
+    struct IssueResult {
         bool hasResult;
         RS_Node rsNode;
-        bool toRS,toSLBuffer;
+        bool toRS, toSLBuffer;
     };
 
-    struct ExResult{
+    struct ExResult {
         bool hasResult;
         unsigned int value;
         int posROB;
     };
 
-    struct CommitResult{
+    struct CommitResult {
 
     };
-
-
 
 
 private:
     //private variable
     unsigned int pc;
-    unsigned char* memory;
-    regFile regPre,regNext;
-    loopQueue<unsigned int> preFetchQue,nextFetchQue;
+    unsigned char *memory;
+    regFile regPre, regNext;
+    loopQueue<unsigned int> preFetchQue, nextFetchQue;
     //switches
     bool RS_is_stall;
 
@@ -246,35 +254,38 @@ private:
     RS rs;
     SLBuffer slBuffer;
 public:
-	simulator(){
-        memory=new unsigned char [mem_size];
-        memset(memory,0, sizeof(memory));
-	}
-	void scan(){
+    simulator() {
+        memory = new unsigned char[mem_size];
+        memset(memory, 0, sizeof(memory));
+    }
+
+    void scan() {
         std::string s;
-        unsigned int pos=0;
-        while (std::cin>>s) {
-            if (s=="#") break;
-            if (s[0]=='@') {
-                pos=0;
+        unsigned int pos = 0;
+        while (std::cin >> s) {
+            if (s == "#") break;
+            if (s[0] == '@') {
+                pos = 0;
                 for (int i = 1; i <= 8; ++i)
-                    pos=(pos<<4)+ hexToDec(s[i]);
+                    pos = (pos << 4) + hexToDec(s[i]);
             } else {
-                memory[pos++]= (hexToDec(s[0])<<4)+ hexToDec(s[1]);
+                memory[pos++] = (hexToDec(s[0]) << 4) + hexToDec(s[1]);
             }
         }
-	}
-	unsigned int cycle = 0;
-	void run(){
-        while(true){
+    }
+
+    unsigned int cycle = 0;
+
+    void run() {
+        while (true) {
             /*在这里使用了两阶段的循环部分：
               1. 实现时序电路部分，即在每个周期初同步更新的信息。
               2. 实现组合电路部分，即在每个周期中如ex、issue的部分
               已在下面给出代码
             */
             run_rob();
-            if(code_from_rob_to_commit == 0x0ff00513){
-                std::cout << std::dec << ((unsigned int)regPre[10] & 255u);
+            if (code_from_rob_to_commit == 0x0ff00513) {
+                std::cout << std::dec << ((unsigned int) regPre[10] & 255u);
                 break;
             }
             run_slbuffer();
@@ -287,9 +298,9 @@ public:
             run_issue();
             run_commit();
         }
-	}
+    }
 
-    void run_inst_fetch_queue(){
+    void run_inst_fetch_queue() {
         /*
         在这一部分你需要完成的工作：
         1. 实现一个先进先出的指令队列
@@ -298,13 +309,13 @@ public:
         tips: 考虑边界问题（满/空...）
         */
         //todo:branch predict
-        if (nextFetchQue.getStatus()!=1) {
+        if (nextFetchQue.getStatus() != 1) {
             nextFetchQue.push(combineChars(pc));
             pc += 4;
         }
     }
 
-    void run_issue(){
+    void run_issue() {
         /*
         在这一部分你需要完成的工作：
         1. 从run_inst_fetch_queue()中得到issue的指令
@@ -317,34 +328,35 @@ public:
         tips: 考虑边界问题（是否还有足够的空间存放下一条指令）
         */
         //todo: stall situation
-        if (preFetchQue.getStatus()!=0) {
+        if (preFetchQue.getStatus() != 0) {
             //set the command
             binaryManager command;
             command.setValue(preFetchQue.getFront());
             preFetchQue.pop();
             //ID
-            int Q1,Q2;
-            unsigned int immediate, npc = pc,V1,V2;
+            int Q1, Q2;
+            unsigned int immediate, npc = pc, V1, V2;
             unsigned char opcode = command.slice(0, 6), func3 = 0, func7 = 0;
             char rd = -1, rs1 = -1, rs2 = -1;
-            issueResult.toRS=issueResult.toSLBuffer= false;
+            issueResult.toRS = issueResult.toSLBuffer = false;
             baseOperator *basePtr;
             OpType Type;
             switch (opcode) {
-                case 55:case 23:
+                case 55:
+                case 23:
                     //LUI U-type
                     //AUIPC U-type
                     immediate = command.slice(12, 31) << 12;
                     basePtr = new UtypeOperator;
-                    Type=U;
-                    issueResult.toRS= true;
+                    Type = U;
+                    issueResult.toRS = true;
                     break;
                 case 111:
                     //JAL J-type
                     immediate = (command[31] * ((1 << 12) - 1) << 20) + (command.slice(12, 19) << 12) +
                                 (command[20] << 11) + (command.slice(25, 30) << 5) + (command.slice(21, 24) << 1);
                     basePtr = new JtypeOperator;
-                    Type=J;
+                    Type = J;
                     break;
                 case 99:
                     //B-type
@@ -355,7 +367,7 @@ public:
                     rs1 = command.slice(15, 19);
                     rs2 = command.slice(20, 24);
                     basePtr = new BtypeOperator;
-                    Type=B;
+                    Type = B;
                     break;
                 case 3:
                 case 19:
@@ -367,7 +379,7 @@ public:
                     rd = command.slice(7, 11);
                     rs1 = command.slice(15, 19);
                     basePtr = new ItypeOperator;
-                    Type=I;
+                    Type = I;
                     break;
                 case 35:
                     //S-type
@@ -376,7 +388,7 @@ public:
                     func3 = command.slice(12, 14);
                     rs1 = command.slice(15, 19);
                     basePtr = new StypeOperator;
-                    Type=S;
+                    Type = S;
                     break;
                 case 51:
                     //R-type
@@ -386,38 +398,36 @@ public:
                     func3 = command.slice(12, 14);
                     func7 = command.slice(25, 31);
                     basePtr = new RtypeOperator;
-                    Type=R;
+                    Type = R;
                     break;
             }
-            basePtr->setValue(opcode, func3, func7, immediate, npc,Type);
-            issueResult.hasResult= true;
-            int posROB=rob.reserve();
-            if (rd!=-1 && rd!=0) regNext(rd)=posROB;
-            if (rs1!=-1) {
-                if ((Q1=regPre(rs1))==0) V1=regPre[rs1];
+            basePtr->setValue(opcode, func3, func7, immediate, npc, Type);
+            issueResult.hasResult = true;
+            int posROB = rob.reserve();
+            if (rd != -1 && rd != 0) regNext(rd) = posROB;
+            if (rs1 != -1) {
+                if ((Q1 = regPre(rs1)) == 0) V1 = regPre[rs1];
                 else if (rob[Q1].hasValue) {
-                    Q1=0;
-                    V1=rob[Q1].value;
+                    Q1 = 0;
+                    V1 = rob[Q1].value;
                 }
-            }
-            else Q1=0;
-            if (rs2!=-1) {
-                if ((Q2=regPre(rs2))==0) V2=regPre[rs2];
+            } else Q1 = 0;
+            if (rs2 != -1) {
+                if ((Q2 = regPre(rs2)) == 0) V2 = regPre[rs2];
                 else if (rob[Q2].hasValue) {
-                    Q2=0;
-                    V2=rob[Q2].value;
+                    Q2 = 0;
+                    V2 = rob[Q2].value;
                 }
-            }
-            else Q2=0;
-            issueResult.rsNode.setValue(true,posROB,Q1,Q2,V1,V2,basePtr);
-            if (opcode==35 || opcode==3) issueResult.toSLBuffer= true;
+            } else Q2 = 0;
+            issueResult.rsNode.setValue(true, posROB, Q1, Q2, V1, V2, basePtr);
+            if (opcode == 35 || opcode == 3) issueResult.toSLBuffer = true;
             else issueResult.toRS = true;
         } else {
             issueResult.hasResult = false;
         }
     }
 
-    void run_reservation(){
+    void run_reservation() {
         /*
         在这一部分你需要完成的工作：
         1. 设计一个Reservation Station，其中要存储的东西可以参考CAAQA或其余资料，至少需要有用到的寄存器信息等
@@ -427,7 +437,7 @@ public:
         */
         //todo run issue directly
         if (issueResult.hasResult && issueResult.toRS) {
-            if (issueResult.rsNode.canEx()) rs.exNum=-2;
+            if (issueResult.rsNode.canEx()) rs.exNum = -2;
             else {
                 rs.exNum = rs.scan();
                 rs.insert(issueResult.rsNode);
@@ -436,30 +446,30 @@ public:
         //todo update with the result of ex or slbuffer
     }
 
-    void run_ex(){
+    void run_ex() {
         /*
         在这一部分你需要完成的工作：
         根据Reservation Station发出的信息进行相应的计算
         tips: 考虑如何处理跳转指令并存储相关信息
               Store/Load的指令并不在这一部分进行处理
         */
-        if (rs.exNum==-1) {
-            exResult.hasResult=false;
+        if (rs.exNum == -1) {
+            exResult.hasResult = false;
             return;
         }
-        exResult.hasResult= true;
-        if (rs.exNum==-2) {
-            RS_Node &tmp=issueResult.rsNode;
-            exResult.posROB=tmp.id;
-            tmp.opPtr->operate(exResult.value,tmp.V1,tmp.V2);
+        exResult.hasResult = true;
+        if (rs.exNum == -2) {
+            RS_Node &tmp = issueResult.rsNode;
+            exResult.posROB = tmp.id;
+            tmp.opPtr->operate(exResult.value, tmp.V1, tmp.V2);
         } else {
-            RS_Node &tmp=rs[rs.exNum];
-            exResult.posROB=tmp.id;
-            tmp.opPtr->operate(exResult.value,tmp.V1,tmp.V2);
+            RS_Node &tmp = rs[rs.exNum];
+            exResult.posROB = tmp.id;
+            tmp.opPtr->operate(exResult.value, tmp.V1, tmp.V2);
         }
     }
 
-    void run_slbuffer(){
+    void run_slbuffer() {
         /*
         在这一部分中，由于SLBUFFER的设计较为多样，在这里给出两种助教的设计方案：
         1. 1）通过循环队列，设计一个先进先出的SLBUFFER，同时存储 head1、head2、tail三个变量。
@@ -488,7 +498,7 @@ public:
             if (slBuffer.isFull()) {
 
             } else {
-                if (slBuffer.isEmpty()){
+                if (slBuffer.isEmpty()) {
                     //try run issue
                 } else {
 
@@ -498,7 +508,7 @@ public:
         }
     }
 
-    void run_rob(){
+    void run_rob() {
         /*
         在这一部分你需要完成的工作：
         1. 实现一个先进先出的ROB，存储所有指令
@@ -512,14 +522,14 @@ public:
         //todo commit
     }
 
-    void run_regfile(){
+    void run_regfile() {
         /*
         每个寄存器会记录Q和V，含义参考ppt。这一部分会进行写寄存器，内容包括：根据issue和commit的通知修改对应寄存器的Q和V。
         tip: 请注意issue和commit同一个寄存器时的情况
         */
     }
 
-    void run_commit(){
+    void run_commit() {
         /*
         在这一部分你需要完成的工作：
         1. 根据ROB发出的信息通知regfile修改相应的值，包括对应的ROB和是否被占用状态（注意考虑issue和commit同一个寄存器的情况）
@@ -527,7 +537,7 @@ public:
         */
     }
 
-    void update(){
+    void update() {
         /*
         在这一部分你需要完成的工作：
         对于模拟中未完成同步的变量（即同时需记下两个周期的新/旧信息的变量）,进行数据更新。
@@ -538,7 +548,8 @@ public:
         slBuffer.update();
         rob.update();
     }
-	~simulator(){delete [] memory;}
+
+    ~simulator() { delete[] memory; }
 };
 
 #endif
