@@ -15,6 +15,7 @@ protected:
     unsigned int immediate,npc;
 public:
     OpType opType;
+    unsigned char getFunc3();
     virtual void operate(unsigned int& reg_rd,unsigned int reg_rs1,unsigned int reg_rs2)=0;
     void setValue(unsigned char opCode,unsigned char Func3,unsigned char Func7,unsigned int Immediate,unsigned int Npc,OpType type);
 };
@@ -26,13 +27,11 @@ public:
 
 class ItypeOperator:public baseOperator{
 public:
-    unsigned char getFunc3();
     virtual void operate(unsigned int& reg_rd,unsigned int reg_rs1,unsigned int reg_rs2) override;
 };
 
 class StypeOperator:public baseOperator{
 public:
-    unsigned char getFunc3();
     virtual void operate(unsigned int& reg_rd,unsigned int reg_rs1,unsigned int reg_rs2) override;
 };
 

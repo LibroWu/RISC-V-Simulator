@@ -201,11 +201,14 @@ private:
 
         RS_Node rsNode;
         unsigned int value;
+        bool hasCommit;
 
-        SLBufferNode() : exCount(0) {}
+        SLBufferNode() : exCount(0),hasCommit(false){}
 
-
-        bool ready(){}
+        bool ready(){
+            if (rsNode.opPtr->opType==S) return (rsNode.Q1==0 && hasCommit);
+            return rsNode.Q1==0;
+        }
     };
 
     struct SLBuffer {
@@ -529,7 +532,56 @@ public:
                     SLBufferNode& front=slBuffer.preQue.getFront();
                     if (front.ready()) ++front.exCount;
                     if (front.exCount==3) {
-
+                        unsigned int st;
+                        front.rsNode.opPtr->operate(st,front.rsNode.V1,front.rsNode.V2);
+                        if (front.rsNode.opPtr->opType==S) {
+                            switch (front.rsNode.opPtr->getFunc3()) {
+                                case 0:
+                                    //SB
+                                    memory[st]=(front.value] & 0b11111111);
+                                    break;
+                                case 1:
+                                    //SH
+                                    for (int i = st; i < st+2; ++i) {
+                                        memory[i]=front.valuet& 0b11111111;
+                                        front.value>>=8;
+                                    }
+                                    break;
+                                case 2:
+                                    //SW
+                                    for (int i = st; i < st+4; ++i) {
+                                        memory[i]=front.value & 0b11111111;
+                                        front.value>>=8;
+                                    }
+                                    break;
+                            }
+                        } else {
+                            unsigned char t;
+                                switch (front.rsNode.opPtr->getFunc3()) {
+                                    case 0:
+                                        //LB
+                                        t = memory[st];
+                                        reg[command.slice(7, 11)] = ((t & (1 << 7)) * ((1 << 24) - 1)<<1) + t;
+                                        break;
+                                    case 1:
+                                        //LH
+                                        t= combineChars(st,2);
+                                        reg[command.slice(7, 11)] = ((t & (1 << 15)) * ((1 << 16) - 1)<<1) + t;
+                                        break;
+                                    case 2:
+                                        //LW
+                                        reg[command.slice(7, 11)] = combineChars(st,4);
+                                        break;
+                                    case 4:
+                                        //LBU
+                                        reg[command.slice(7, 11)] =memory[st];
+                                        break;
+                                    case 5:
+                                        //LHU
+                                        reg[command.slice(7, 11)] = combineChars(st,2);
+                                        break;
+                                }
+                        }
                     }
 
                 }

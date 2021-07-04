@@ -78,7 +78,4 @@ void StypeOperator::operate(unsigned int &reg_rd, unsigned int reg_rs1, unsigned
     //figure out the address
     reg_rd=reg_rs1+immediate;
 }
-
-unsigned char StypeOperator::getFunc3() {return func3;}
-
-unsigned char ItypeOperator::getFunc3() {return func3;}
+unsigned char baseOperator::getFunc3() {return func3;}
