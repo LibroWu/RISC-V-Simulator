@@ -36,13 +36,9 @@ private:
             memset(Q, 0, sizeof(Q));
         }
 
-        unsigned int &operator[](int pos) {
-            return reg[pos];
-        }
+        unsigned int &operator[](int pos) {return reg[pos];}
 
-        int &operator()(int pos) {
-            return Q[pos];
-        }
+        int &operator()(int pos) {return Q[pos];}
     };
 
     template<class T, unsigned int len = QUEUE_SIZE>
@@ -60,16 +56,14 @@ private:
             if (tail == len) tail = 0;
             if (status == -1) status = 0;
             if (tail == head) status = 1;
-            return preTail;
+            return preTail+1;
         }
 
-        int getTail() { return tail; }
+        int getTail() { return tail+1; }
 
         loopQueue() : head(0), tail(0), status(-1) {}
 
-        char getStatus() {
-            return status;
-        }
+        char getStatus() {return status;}
 
         int push(const T &t) {
             int prePail = tail;
@@ -77,7 +71,7 @@ private:
             if (tail == len) tail = 0;
             if (status == -1) status = 0;
             if (tail == head) status = 1;
-            return prePail;
+            return prePail+1;
         }
 
         void pop() {
@@ -86,19 +80,15 @@ private:
             if (head == tail) status = -1;
         }
 
-        T &getFront() {
-            return que[head];
-        }
+        T &getFront() {return que[head];}
 
-        T &operator[](int pos) {
-            return que[pos];
-        }
+        T &operator[](int pos) {return que[pos-1];}
     };
 
     struct ROB_Node {
         unsigned int value;
-        int linkToRs, linkToReg;
-        bool hasValue;
+        int linkToRs, linkToReg,id;
+        bool hasValue,isStore;
 
         ROB_Node() : hasValue(0) {}
     };
@@ -115,13 +105,15 @@ private:
             preQue = nextQue;
         }
 
-        int getPos() {
+        int getTail() {
             return preQue.getTail();
         }
 
         int reserve() {
             return nextQue.reserve();
         }
+
+        ROB_Node& getFront(){return preQue.getFront();}
 
         ROB_Node &operator[](int pos) {
             return preQue[pos];
@@ -130,37 +122,17 @@ private:
         ROB_Node &operator()(int pos) {
             return nextQue[pos];
         }
-
     };
 
-    struct SLBufferNode {
-        char exCount;
-        baseOperator *basePtr;
 
-        SLBufferNode() : exCount(0) {}
-    };
-
-    struct SLBuffer {
-        loopQueue<SLBufferNode> preQue, nextQue;
-
-        void update() {}
-
-        bool isFull() { return preQue.getStatus() == 1; }
-
-        bool isEmpty() { return preQue.getStatus() == -1; }
-
-        SLBufferNode &operator[](int pos) { return preQue[pos]; }
-
-        SLBufferNode &operator()(int pos) { return nextQue[pos]; }
-    };
 
     struct RS_Node {
-        bool busy, hasEx;
+        bool busy;
         int id, Q1, Q2, next;
         unsigned int V1, V2;
         baseOperator *opPtr;
 
-        RS_Node() : busy(0), hasEx(false), opPtr(nullptr) {}
+        RS_Node() : busy(0), opPtr(nullptr) {}
 
         void setValue(bool Busy, int Id, int QI, int QII, unsigned int VI, unsigned int VII, baseOperator *OpPtr) {
             busy = Busy, id = Id, Q1 = QI, Q2 = QII, V1 = VI, V2 = VII, opPtr = OpPtr;
@@ -168,6 +140,15 @@ private:
 
         bool canEx() {
             return (Q1 == 0 && Q2 == 0);
+        }
+
+        bool match(int pos){
+            return (Q1==pos || Q2==pos);
+        }
+
+        void setValue(int pos, unsigned int v){
+            if (Q1==pos) {V1=v;Q1=0;}
+            if (Q2==pos) {V2=v;Q2=0;}
         }
     };
 
@@ -193,9 +174,7 @@ private:
             return -1;
         }
 
-        void update() {
-            preBuffer = nextBuffer;
-        }
+        void update() {preBuffer = nextBuffer;}
 
         void insert(const RS_Node &rsNode) {
             int next = nextBuffer.rsQue[nextBuffer.head].next;
@@ -210,22 +189,47 @@ private:
         }
 
         //get the value in pre
-        RS_Node &operator[](int pos) {
-            return preBuffer.rsQue[pos];
-        }
+        RS_Node &operator[](int pos) {return preBuffer.rsQue[pos];}
 
         //get the value in next
-        RS_Node &operator()(int pos) {
-            return nextBuffer.rsQue[pos];
-        }
+        RS_Node &operator()(int pos) {return nextBuffer.rsQue[pos];}
 
     };
 
+    struct SLBufferNode {
+        char exCount;
+
+        RS_Node rsNode;
+        unsigned int value;
+
+        SLBufferNode() : exCount(0) {}
+
+
+        bool ready(){}
+    };
+
+    struct SLBuffer {
+        loopQueue<SLBufferNode> preQue, nextQue;
+
+        void update() { preQue=nextQue; }
+
+        bool isFull() { return preQue.getStatus() == 1; }
+
+        bool isEmpty() { return preQue.getStatus() == -1; }
+
+        void push(const SLBufferNode& node) {
+            nextQue.push(node);
+        }
+
+        SLBufferNode &operator[](int pos) { return preQue[pos]; }
+
+        SLBufferNode &operator()(int pos) { return nextQue[pos]; }
+    };
     //result buffer
     struct IssueResult {
         bool hasResult;
         RS_Node rsNode;
-        bool toRS, toSLBuffer;
+        bool toRS, toSLBuffer, isStore;
     };
 
     struct ExResult {
@@ -234,10 +238,11 @@ private:
         int posROB;
     };
 
-    struct CommitResult {
 
+    struct ChannelToRegfile{
+        int issue_rd,issue_pos,commit_rd,id;
+        unsigned int commit_value;
     };
-
 
 private:
     //private variable
@@ -246,13 +251,14 @@ private:
     regFile regPre, regNext;
     loopQueue<unsigned int> preFetchQue, nextFetchQue;
     //switches
-    bool RS_is_stall;
+    bool RS_is_stall,commit_flag,reserve_flag,fetch_flag;
 
     IssueResult issueResult;
     ExResult exResult;
     ROB rob;
     RS rs;
     SLBuffer slBuffer;
+    ChannelToRegfile channelToRegfile;
 public:
     simulator() {
         memory = new unsigned char[mem_size];
@@ -309,6 +315,7 @@ public:
         tips: 考虑边界问题（满/空...）
         */
         //todo:branch predict
+        if (fetch_flag) nextFetchQue.pop();
         if (nextFetchQue.getStatus() != 1) {
             nextFetchQue.push(combineChars(pc));
             pc += 4;
@@ -332,7 +339,7 @@ public:
             //set the command
             binaryManager command;
             command.setValue(preFetchQue.getFront());
-            preFetchQue.pop();
+            fetch_flag = true;
             //ID
             int Q1, Q2;
             unsigned int immediate, npc = pc, V1, V2;
@@ -389,6 +396,7 @@ public:
                     rs1 = command.slice(15, 19);
                     basePtr = new StypeOperator;
                     Type = S;
+                    issueResult.isStore=true;
                     break;
                 case 51:
                     //R-type
@@ -403,8 +411,15 @@ public:
             }
             basePtr->setValue(opcode, func3, func7, immediate, npc, Type);
             issueResult.hasResult = true;
-            int posROB = rob.reserve();
-            if (rd != -1 && rd != 0) regNext(rd) = posROB;
+            issueResult.isStore=false;
+            reserve_flag= true;
+            int posROB = rob.getTail();
+            if (rd != -1 && rd != 0) {
+                channelToRegfile.issue_rd = rd;
+                channelToRegfile.issue_pos = posROB;
+            } else {
+                channelToRegfile.issue_rd = -1;
+            }
             if (rs1 != -1) {
                 if ((Q1 = regPre(rs1)) == 0) V1 = regPre[rs1];
                 else if (rob[Q1].hasValue) {
@@ -423,6 +438,7 @@ public:
             if (opcode == 35 || opcode == 3) issueResult.toSLBuffer = true;
             else issueResult.toRS = true;
         } else {
+            reserve_flag= false;
             issueResult.hasResult = false;
         }
     }
@@ -435,6 +451,14 @@ public:
         3. 从Reservation Station或者issue进来的指令中选择一条可计算的发送给EX进行计算
         4. 根据上个周期EX阶段或者SLBUFFER的计算得到的结果遍历Reservation Station，更新相应的值
         */
+        //todo update with the result of ex or slbuffer
+        //todo stall
+        if (exResult.hasResult) {
+            for (int i = 0; i < QUEUE_SIZE; ++i)
+                if (rs(i).busy && rs(i).match(exResult.posROB))
+                    rs(i).setValue(exResult.posROB,exResult.value);
+        }
+        //todo forward
         //todo run issue directly
         if (issueResult.hasResult && issueResult.toRS) {
             if (issueResult.rsNode.canEx()) rs.exNum = -2;
@@ -443,7 +467,6 @@ public:
                 rs.insert(issueResult.rsNode);
             }
         }
-        //todo update with the result of ex or slbuffer
     }
 
     void run_ex() {
@@ -498,12 +521,19 @@ public:
             if (slBuffer.isFull()) {
 
             } else {
+                SLBufferNode tmp;
+                tmp.rsNode=issueResult.rsNode;
                 if (slBuffer.isEmpty()) {
-                    //try run issue
+                    if (tmp.ready()) ++tmp.exCount;
                 } else {
+                    SLBufferNode& front=slBuffer.preQue.getFront();
+                    if (front.ready()) ++front.exCount;
+                    if (front.exCount==3) {
+
+                    }
 
                 }
-                slBuffer.insert();
+                slBuffer.push(tmp);
             }
         }
     }
@@ -516,7 +546,17 @@ public:
         2. 根据EX阶段和SLBUFFER的计算得到的结果，遍历ROB，更新ROB中的值
         3. 对于队首的指令，如果已经完成计算及更新，进行commit
         */
+        if (reserve_flag) {
+            rob.reserve();
+            if (issueResult.isStore) rob.getFront().isStore;
+        }
+        if (commit_flag) rob.pop();
         if (exResult.hasResult) {
+            ROB_Node& tmp=rob(exResult.posROB);
+            tmp.hasValue= true;
+            tmp.value=exResult.value;
+        }
+        if (slbResult.hasResult) {
 
         }
         //todo commit
@@ -527,6 +567,11 @@ public:
         每个寄存器会记录Q和V，含义参考ppt。这一部分会进行写寄存器，内容包括：根据issue和commit的通知修改对应寄存器的Q和V。
         tip: 请注意issue和commit同一个寄存器时的情况
         */
+        if (channelToRegfile.commit_rd!=-1) {
+            regNext.reg[channelToRegfile.commit_rd]=channelToRegfile.commit_value;
+            if (regNext.Q[channelToRegfile.commit_rd]==channelToRegfile.id)regNext.Q[channelToRegfile.commit_rd]=0;
+        }
+        if (channelToRegfile.issue_rd!=-1) regNext.Q[channelToRegfile.issue_rd]=channelToRegfile.issue_pos;
     }
 
     void run_commit() {
@@ -535,6 +580,14 @@ public:
         1. 根据ROB发出的信息通知regfile修改相应的值，包括对应的ROB和是否被占用状态（注意考虑issue和commit同一个寄存器的情况）
         2. 遇到跳转指令更新pc值，并发出信号清空所有部分的信息存储（这条对于很多部分都有影响，需要慎重考虑）
         */
+        ROB_Node& tmp=rob.getFront();
+        commit_flag= false;
+        if (tmp.hasValue || tmp.isStore) {
+            channelToRegfile.commit_rd=tmp.linkToReg;
+            channelToRegfile.commit_value=tmp.value;
+            channelToRegfile.id=tmp.id;
+            commit_flag= true;
+        }
     }
 
     void update() {

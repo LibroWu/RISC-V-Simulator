@@ -13,8 +13,8 @@ class baseOperator {
 protected:
     unsigned char opcode,func3,func7;
     unsigned int immediate,npc;
-    OpType opType;
 public:
+    OpType opType;
     virtual void operate(unsigned int& reg_rd,unsigned int reg_rs1,unsigned int reg_rs2)=0;
     void setValue(unsigned char opCode,unsigned char Func3,unsigned char Func7,unsigned int Immediate,unsigned int Npc,OpType type);
 };
