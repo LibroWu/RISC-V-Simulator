@@ -573,6 +573,7 @@ public:
 
            4）同时SLBUFFER还需根据上个周期EX和SLBUFFER的计算结果遍历SLBUFFER进行数据的更新。
         */
+        if (commit_to_SLB) slBuffer.nextQue.getFront().hasCommit = true;
         if (exResult.hasResult) {
             slBuffer.traverse(exResult.posROB, exResult.value);
         }
@@ -581,72 +582,73 @@ public:
         }
         //todo: method 2
         slBuffer.hasResult = false;
+        if (!slBuffer.isEmpty()) {
+            SLBufferNode &front = slBuffer.preQue.getFront();
+            if (front.ready()) ++front.exCount;
+            if (front.exCount == 3) {
+                unsigned int st;
+                front.rsNode.opPtr->operate(st, front.rsNode.V1, front.rsNode.V2);
+                if (front.rsNode.opPtr->opType == S) {
+                    switch (front.rsNode.opPtr->getFunc3()) {
+                        case 0:
+                            //SB
+                            memory[st] = (front.rsNode.V2 & 0b11111111);
+                            break;
+                        case 1:
+                            //SH
+                            for (int i = st; i < st + 2; ++i) {
+                                memory[i] = front.rsNode.V2 & 0b11111111;
+                                front.rsNode.V2 >>= 8;
+                            }
+                            break;
+                        case 2:
+                            //SW
+                            for (int i = st; i < st + 4; ++i) {
+                                memory[i] = front.rsNode.V2 & 0b11111111;
+                                front.rsNode.V2 >>= 8;
+                            }
+                            break;
+                    }
+                    slBuffer.isStore = true;
+                } else {
+                    unsigned char t;
+                    switch (front.rsNode.opPtr->getFunc3()) {
+                        case 0:
+                            //LB
+                            t = memory[st];
+                            front.rsNode.V2 = ((t & (1 << 7)) * ((1 << 24) - 1) << 1) + t;
+                            break;
+                        case 1:
+                            //LH
+                            t = combineChars(st, 2);
+                            front.rsNode.V2 = ((t & (1 << 15)) * ((1 << 16) - 1) << 1) + t;
+                            break;
+                        case 2:
+                            //LW
+                            front.rsNode.V2 = combineChars(st, 4);
+                            break;
+                        case 4:
+                            //LBU
+                            front.rsNode.V2 = memory[st];
+                            break;
+                        case 5:
+                            //LHU
+                            front.rsNode.V2 = combineChars(st, 2);
+                            break;
+                    }
+                    slBuffer.value = front.rsNode.V2;
+                    slBuffer.isStore = false;
+                }
+                slBuffer.hasResult = true;
+                slBuffer.posROB = front.rsNode.id;
+                slBuffer.pop();
+            } else slBuffer.nextQue.getFront() = front;
+        }
         if (issueResult.hasResult && issueResult.toSLBuffer) {
             SLBufferNode tmp;
             tmp.rsNode = issueResult.rsNode;
             if (slBuffer.isEmpty()) {
                 if (tmp.ready()) ++tmp.exCount;
-            } else {
-                SLBufferNode &front = slBuffer.preQue.getFront();
-                if (front.ready()) ++front.exCount;
-                if (front.exCount == 3) {
-                    unsigned int st;
-                    front.rsNode.opPtr->operate(st, front.rsNode.V1, front.rsNode.V2);
-                    if (front.rsNode.opPtr->opType == S) {
-                        switch (front.rsNode.opPtr->getFunc3()) {
-                            case 0:
-                                //SB
-                                memory[st] = (front.rsNode.V2 & 0b11111111);
-                                break;
-                            case 1:
-                                //SH
-                                for (int i = st; i < st + 2; ++i) {
-                                    memory[i] = front.rsNode.V2 & 0b11111111;
-                                    front.rsNode.V2 >>= 8;
-                                }
-                                break;
-                            case 2:
-                                //SW
-                                for (int i = st; i < st + 4; ++i) {
-                                    memory[i] = front.rsNode.V2 & 0b11111111;
-                                    front.rsNode.V2 >>= 8;
-                                }
-                                break;
-                        }
-                        slBuffer.isStore = true;
-                    } else {
-                        unsigned char t;
-                        switch (front.rsNode.opPtr->getFunc3()) {
-                            case 0:
-                                //LB
-                                t = memory[st];
-                                front.rsNode.V2 = ((t & (1 << 7)) * ((1 << 24) - 1) << 1) + t;
-                                break;
-                            case 1:
-                                //LH
-                                t = combineChars(st, 2);
-                                front.rsNode.V2 = ((t & (1 << 15)) * ((1 << 16) - 1) << 1) + t;
-                                break;
-                            case 2:
-                                //LW
-                                front.rsNode.V2 = combineChars(st, 4);
-                                break;
-                            case 4:
-                                //LBU
-                                front.rsNode.V2 = memory[st];
-                                break;
-                            case 5:
-                                //LHU
-                                front.rsNode.V2 = combineChars(st, 2);
-                                break;
-                        }
-                        slBuffer.value = front.rsNode.V2;
-                        slBuffer.isStore = false;
-                    }
-                    slBuffer.hasResult = true;
-                    slBuffer.posROB = front.rsNode.id;
-                    slBuffer.pop();
-                } else slBuffer.nextQue.getFront() = front;
             }
             slBuffer.push(tmp);
         }
