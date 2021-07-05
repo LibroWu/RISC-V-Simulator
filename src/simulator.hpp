@@ -4,6 +4,7 @@
 #include <iostream>
 #include <cstring>
 #include <utility>
+#include <iomanip>
 #include "Operator.h"
 #include "binaryManager.h"
 
@@ -17,7 +18,7 @@ private:
 
     unsigned int combineChars(unsigned int pos, unsigned char len = 4) {
         unsigned int res = 0;
-        for (int i = pos + len - 1; i >= pos; --i) {
+        for (int i = pos + len - 1; i >= int(pos); --i) {
             res = (res << 8) + memory[i];
         }
         return res;
@@ -38,7 +39,7 @@ private:
 
         int &operator()(int pos) { return Q[pos]; }
 
-        void clearQ(){memset(Q, 0, sizeof(Q));};
+        void clearQ(){memset(Q, 0, sizeof(Q));}
     };
 
     struct SLBuffer;
@@ -94,7 +95,7 @@ private:
     };
 
     struct ROB_Node {
-        unsigned int value, predict_pc, npc;
+        unsigned int value, predict_pc, npc, origin_code;
         int linkToReg, id;
         bool hasValue, isJump, isStore;
 
@@ -130,7 +131,7 @@ private:
             nextQue.clear();
         }
     };
-    
+
     struct RS_Node {
         bool busy;
         int id, Q1, Q2, next;
@@ -180,6 +181,8 @@ private:
 
         RS_Node exNode;
         bool exFlag;
+
+        RS():exFlag(0){}
 
         //scan the whole station and return the command which is ready for execution
         bool scan() {
@@ -239,6 +242,8 @@ private:
         unsigned int value;
         int posROB;
 
+        SLBuffer():hasResult(0),isStore(0),value(0),posROB(0){}
+
         loopQueue<SLBufferNode> preQue, nextQue;
 
         void update() { preQue = nextQue; }
@@ -260,7 +265,7 @@ private:
             bool flag = true;
             while (i != nextQue.tail || flag && nextQue.status == 1) {
                 flag = false;
-                if (nextQue[i].rsNode.opPtr->opType == S) {
+                if (nextQue[i+1].rsNode.opPtr->opType == S) {
                     if (nextQue[i].rsNode.Q1 == posROB) {
                         nextQue[i].rsNode.Q1 = 0;
                         nextQue[i].rsNode.V1 = value;
@@ -292,28 +297,35 @@ private:
     struct IssueResult {
         bool hasResult, toRS, toSLBuffer;;
         RS_Node rsNode;
+
+        IssueResult():hasResult(0),toRS(0),toSLBuffer(0){}
     };
 
     struct ExResult {
         bool hasResult;
         unsigned int value,npc;
         int posROB;
+
+        ExResult():hasResult(0),value(0),npc(0),posROB(0){}
     };
 
     struct ChannelToRegfile {
         int issue_rd, issue_pos, commit_rd, id;
         unsigned int commit_value;
+
+        ChannelToRegfile():issue_rd(-1),issue_pos(-1),commit_rd(-1),commit_value(0){}
     };
 
 private:
     //private variable
-    unsigned int pc, code_from_rob_to_commit, reserve_predict_pc;
+    unsigned int pc, code_from_rob_to_commit, reserve_predict_pc, reserve_origin_code;
     unsigned char *memory;
     int reserve_link_to_reg;
     regFile regPre, regNext;
     loopQueue<std::pair<unsigned int, unsigned int>> preFetchQue, nextFetchQue;
     //switches
-    bool RS_is_stall, commit_flag, reserve_flag, reserve_isJump, fetch_flag, SLBuffer_is_stall, ROB_is_stall, commit_to_SLB;
+    bool RS_is_stall, SLBuffer_is_stall, commit_flag, reserve_flag, reserve_isJump, reserve_isStore;
+    bool fetch_flag, ROB_is_stall, commit_to_SLB;
     bool issue_to_ex_flag;
     RS_Node issue_to_ex_node;
 
@@ -324,8 +336,9 @@ private:
     SLBuffer slBuffer;
     ChannelToRegfile channelToRegfile;
 public:
-    simulator() {
-        memory = new unsigned char[mem_size];
+    simulator():pc(0),memory(new unsigned char[mem_size]) {
+        RS_is_stall=ROB_is_stall=SLBuffer_is_stall= false;
+
         memset(memory, 0, sizeof(memory));
     }
 
@@ -381,15 +394,17 @@ public:
         */
         //todo:branch predict
         binaryManager command;
+        static int next_pc=0;
+        pc=next_pc;
         if (fetch_flag) nextFetchQue.pop();
         if (nextFetchQue.getStatus() != 1) {
-            nextFetchQue.push(std::make_pair(combineChars(pc), pc + 4));
             command.setValue(combineChars(pc));
             if (command.slice(0, 6) == 111) {
                 //JAL J-type
-                pc += (command[31] * ((1 << 12) - 1) << 20) + (command.slice(12, 19) << 12) +
+                next_pc = pc + (command[31] * ((1 << 12) - 1) << 20) + (command.slice(12, 19) << 12) +
                       (command[20] << 11) + (command.slice(25, 30) << 5) + (command.slice(21, 24) << 1);
-            } else pc += 4;
+            } else next_pc = pc + 4;
+            nextFetchQue.push(std::make_pair((unsigned int) command, next_pc));
         }
     }
 
@@ -405,8 +420,9 @@ public:
         3. 对于 Load/Store指令，将指令分解后发到SLBuffer(需注意SLBUFFER也该是个先进先出的队列实现)
         tips: 考虑边界问题（是否还有足够的空间存放下一条指令）
         */
-        if (preFetchQue.getStatus() != 0 && !ROB_is_stall) {
+        if (preFetchQue.getStatus() != -1 && !ROB_is_stall) {
             //set the command
+            std::cout<<std::hex<<pc<<std::endl;
             binaryManager command;
             command.setValue(preFetchQue.getFront().first);
             fetch_flag = true;
@@ -425,6 +441,7 @@ public:
                     //AUIPC U-type
                     immediate = command.slice(12, 31) << 12;
                     basePtr = new UtypeOperator;
+                    rd = command.slice(7,11);
                     Type = U;
                     issueResult.toRS = true;
                     break;
@@ -433,6 +450,7 @@ public:
                     immediate = (command[31] * ((1 << 12) - 1) << 20) + (command.slice(12, 19) << 12) +
                                 (command[20] << 11) + (command.slice(25, 30) << 5) + (command.slice(21, 24) << 1);
                     basePtr = new JtypeOperator;
+                    rd = command.slice(7,11);
                     Type = J;
                     break;
                 case 99:
@@ -504,8 +522,11 @@ public:
             if (opcode == 35 || opcode == 3) issueResult.toSLBuffer = true;
             else issueResult.toRS = true;
             //ID end
+            //set the signal
             issueResult.hasResult = true;
             reserve_flag = true;
+            reserve_isStore = issueResult.rsNode.opPtr->opType==S;
+            reserve_origin_code=(unsigned int)(command);
             reserve_link_to_reg = (rd == 0) ? -1 : rd;
             reserve_isJump = (opcode == 99 || opcode == 103);
             reserve_predict_pc = preFetchQue.getFront().second;
@@ -696,8 +717,11 @@ public:
         if (reserve_flag) {
             int pos = rob.reserve();
             rob(pos).linkToReg = reserve_link_to_reg;
+            rob(pos).isStore = reserve_isStore;
+            if (reserve_isStore) rob(pos).hasValue = true;
             rob(pos).isJump = reserve_isJump;
             rob(pos).predict_pc = reserve_predict_pc;
+            rob(pos).origin_code = reserve_origin_code;
             reserve_flag = false;
         }
         if (commit_flag) rob.pop();
@@ -741,6 +765,7 @@ public:
             channelToRegfile.commit_value = tmp.value;
             channelToRegfile.id = tmp.id;
             commit_flag = true;
+            code_from_rob_to_commit = tmp.origin_code;
             if (tmp.isJump && tmp.predict_pc!=tmp.npc) {
                 rs.clear();
                 rob.clear();
