@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <cstring>
+#include <utility>
 #include "Operator.h"
 #include "binaryManager.h"
 
@@ -12,13 +13,10 @@ const int mem_size = 4194304;
 class simulator {
 private:
     //private function
-    unsigned char hexToDec(char c) {
-        return ((c <= '9' && c >= '0') ? c - '0' : c - 'A' + 10);
-    }
+    unsigned char hexToDec(char c) { return ((c <= '9' && c >= '0') ? c - '0' : c - 'A' + 10); }
 
-    unsigned int combineChars(int pos = -1, unsigned char len = 4) {
+    unsigned int combineChars(unsigned int pos, unsigned char len = 4) {
         unsigned int res = 0;
-        if (pos == -1) pos = pc;
         for (int i = pos + len - 1; i >= pos; --i) {
             res = (res << 8) + memory[i];
         }
@@ -36,13 +34,16 @@ private:
             memset(Q, 0, sizeof(Q));
         }
 
-        unsigned int &operator[](int pos) {return reg[pos];}
+        unsigned int &operator[](int pos) { return reg[pos]; }
 
-        int &operator()(int pos) {return Q[pos];}
+        int &operator()(int pos) { return Q[pos]; }
     };
+
+    struct SLBuffer;
 
     template<class T, unsigned int len = QUEUE_SIZE>
     class loopQueue {
+        friend SLBuffer;
     private:
         int head, tail;
         //1 for full,-1 for empty, others 0
@@ -56,14 +57,14 @@ private:
             if (tail == len) tail = 0;
             if (status == -1) status = 0;
             if (tail == head) status = 1;
-            return preTail+1;
+            return preTail + 1;
         }
 
-        int getTail() { return tail+1; }
+        int getTail() { return tail + 1; }
 
         loopQueue() : head(0), tail(0), status(-1) {}
 
-        char getStatus() {return status;}
+        char getStatus() { return status; }
 
         int push(const T &t) {
             int prePail = tail;
@@ -71,7 +72,7 @@ private:
             if (tail == len) tail = 0;
             if (status == -1) status = 0;
             if (tail == head) status = 1;
-            return prePail+1;
+            return prePail + 1;
         }
 
         void pop() {
@@ -80,50 +81,43 @@ private:
             if (head == tail) status = -1;
         }
 
-        T &getFront() {return que[head];}
+        T &getFront() { return que[head]; }
 
-        T &operator[](int pos) {return que[pos-1];}
+        T &operator[](int pos) { return que[pos - 1]; }
     };
 
     struct ROB_Node {
-        unsigned int value;
-        int linkToRs, linkToReg,id;
-        bool hasValue,isStore;
+        unsigned int value, predict_pc;
+        int linkToReg, id;
+        bool hasValue, isJump, isStore;
 
-        ROB_Node() : hasValue(0) {}
+        ROB_Node() : hasValue(0), isJump(0) {}
     };
 
     class ROB {
     private:
         loopQueue<ROB_Node> preQue, nextQue;
     public:
-        bool isFull() {
-            return nextQue.getStatus() == 1;
-        }
+        bool isFull() { return nextQue.getStatus() == 1; }
 
-        void update() {
-            preQue = nextQue;
-        }
+        void update() { preQue = nextQue; }
 
-        int getTail() {
-            return preQue.getTail();
-        }
+        int getTail() { return preQue.getTail(); }
 
         int reserve() {
-            return nextQue.reserve();
+            int pos = nextQue.reserve();
+            nextQue[pos].id = pos;
+            return pos;
         }
 
-        ROB_Node& getFront(){return preQue.getFront();}
+        ROB_Node &getFront() { return preQue.getFront(); }
 
-        ROB_Node &operator[](int pos) {
-            return preQue[pos];
-        }
+        ROB_Node &operator[](int pos) { return preQue[pos]; }
 
-        ROB_Node &operator()(int pos) {
-            return nextQue[pos];
-        }
+        ROB_Node &operator()(int pos) { return nextQue[pos]; }
+
+        void pop() { nextQue.pop(); }
     };
-
 
 
     struct RS_Node {
@@ -142,13 +136,19 @@ private:
             return (Q1 == 0 && Q2 == 0);
         }
 
-        bool match(int pos){
-            return (Q1==pos || Q2==pos);
+        bool match(int pos) {
+            return (Q1 == pos || Q2 == pos);
         }
 
-        void setValue(int pos, unsigned int v){
-            if (Q1==pos) {V1=v;Q1=0;}
-            if (Q2==pos) {V2=v;Q2=0;}
+        void setValue(int pos, unsigned int v) {
+            if (Q1 == pos) {
+                V1 = v;
+                Q1 = 0;
+            }
+            if (Q2 == pos) {
+                V2 = v;
+                Q2 = 0;
+            }
         }
     };
 
@@ -162,19 +162,21 @@ private:
             }
         } preBuffer, nextBuffer;
 
-        int exNum;
+        RS_Node exNode;
+        bool exFlag;
 
         //scan the whole station and return the command which is ready for execution
-        int scan() {
+        bool scan() {
             for (int j = 0; j < QUEUE_SIZE; ++j)
                 if (preBuffer.rsQue[j].busy && preBuffer.rsQue[j].canEx()) {
+                    exNode = preBuffer.rsQue[j];
                     remove(j);
-                    return j;
+                    return true;
                 }
-            return -1;
+            return false;
         }
 
-        void update() {preBuffer = nextBuffer;}
+        void update() { preBuffer = nextBuffer; }
 
         void insert(const RS_Node &rsNode) {
             int next = nextBuffer.rsQue[nextBuffer.head].next;
@@ -189,50 +191,79 @@ private:
         }
 
         //get the value in pre
-        RS_Node &operator[](int pos) {return preBuffer.rsQue[pos];}
+        RS_Node &operator[](int pos) { return preBuffer.rsQue[pos]; }
 
         //get the value in next
-        RS_Node &operator()(int pos) {return nextBuffer.rsQue[pos];}
+        RS_Node &operator()(int pos) { return nextBuffer.rsQue[pos]; }
 
+        bool isFull() { return nextBuffer.head == QUEUE_SIZE; }
     };
 
     struct SLBufferNode {
         char exCount;
 
         RS_Node rsNode;
-        unsigned int value;
         bool hasCommit;
 
-        SLBufferNode() : exCount(0),hasCommit(false){}
+        SLBufferNode() : exCount(0), hasCommit(false) {}
 
-        bool ready(){
-            if (rsNode.opPtr->opType==S) return (rsNode.Q1==0 && hasCommit);
-            return rsNode.Q1==0;
+        bool ready() {
+            if (rsNode.opPtr->opType == S) return (rsNode.Q1 == 0 && hasCommit);
+            return rsNode.Q1 == 0;
         }
     };
 
     struct SLBuffer {
+        bool hasResult, isStore;
+        unsigned int value;
+        int posROB;
+
         loopQueue<SLBufferNode> preQue, nextQue;
 
-        void update() { preQue=nextQue; }
+        void update() { preQue = nextQue; }
 
-        bool isFull() { return preQue.getStatus() == 1; }
+        bool isFull() { return nextQue.getStatus() == 1; }
 
         bool isEmpty() { return preQue.getStatus() == -1; }
 
-        void push(const SLBufferNode& node) {
-            nextQue.push(node);
-        }
+        void push(const SLBufferNode &node) { nextQue.push(node); }
+
+        void pop() { nextQue.pop(); }
 
         SLBufferNode &operator[](int pos) { return preQue[pos]; }
 
         SLBufferNode &operator()(int pos) { return nextQue[pos]; }
+
+        void traverse(int posROB, unsigned int value) {
+            int i = nextQue.head;
+            bool flag = true;
+            while (i != nextQue.tail || flag && nextQue.status == 1) {
+                flag = false;
+                if (nextQue[i].rsNode.opPtr->opType == S) {
+                    if (nextQue[i].rsNode.Q1 == posROB) {
+                        nextQue[i].rsNode.Q1 = 0;
+                        nextQue[i].rsNode.V1 = value;
+                    }
+                    if (nextQue[i].rsNode.Q2 == posROB) {
+                        nextQue[i].rsNode.Q2 = 0;
+                        nextQue[i].rsNode.V2 = value;
+                    }
+                } else {
+                    if (nextQue[i].rsNode.Q1 == posROB) {
+                        nextQue[i].rsNode.Q1 = 0;
+                        nextQue[i].rsNode.V1 = value;
+                    }
+                }
+                ++i;
+                if (i == QUEUE_SIZE) i = 0;
+            }
+        }
     };
+
     //result buffer
     struct IssueResult {
-        bool hasResult;
+        bool hasResult, toRS, toSLBuffer;;
         RS_Node rsNode;
-        bool toRS, toSLBuffer, isStore;
     };
 
     struct ExResult {
@@ -241,20 +272,22 @@ private:
         int posROB;
     };
 
-
-    struct ChannelToRegfile{
-        int issue_rd,issue_pos,commit_rd,id;
+    struct ChannelToRegfile {
+        int issue_rd, issue_pos, commit_rd, id;
         unsigned int commit_value;
     };
 
 private:
     //private variable
-    unsigned int pc;
+    unsigned int pc, code_from_rob_to_commit, reserve_predict_pc;
     unsigned char *memory;
+    int reserve_link_to_reg;
     regFile regPre, regNext;
-    loopQueue<unsigned int> preFetchQue, nextFetchQue;
+    loopQueue<std::pair<unsigned int, unsigned int>> preFetchQue, nextFetchQue;
     //switches
-    bool RS_is_stall,commit_flag,reserve_flag,fetch_flag;
+    bool RS_is_stall, commit_flag, reserve_flag, reserve_isJump, fetch_flag, SLBuffer_is_stall, ROB_is_stall, commit_to_SLB;
+    bool issue_to_ex_flag;
+    RS_Node issue_to_ex_node;
 
     IssueResult issueResult;
     ExResult exResult;
@@ -287,6 +320,7 @@ public:
 
     void run() {
         while (true) {
+            ++cycle;
             /*在这里使用了两阶段的循环部分：
               1. 实现时序电路部分，即在每个周期初同步更新的信息。
               2. 实现组合电路部分，即在每个周期中如ex、issue的部分
@@ -318,10 +352,16 @@ public:
         tips: 考虑边界问题（满/空...）
         */
         //todo:branch predict
+        binaryManager command;
         if (fetch_flag) nextFetchQue.pop();
         if (nextFetchQue.getStatus() != 1) {
-            nextFetchQue.push(combineChars(pc));
-            pc += 4;
+            nextFetchQue.push(std::make_pair(combineChars(pc), pc + 4));
+            command.setValue(combineChars(pc));
+            if (command.slice(0, 6) == 111) {
+                //JAL J-type
+                pc += (command[31] * ((1 << 12) - 1) << 20) + (command.slice(12, 19) << 12) +
+                      (command[20] << 11) + (command.slice(25, 30) << 5) + (command.slice(21, 24) << 1);
+            } else pc += 4;
         }
     }
 
@@ -337,11 +377,10 @@ public:
         3. 对于 Load/Store指令，将指令分解后发到SLBuffer(需注意SLBUFFER也该是个先进先出的队列实现)
         tips: 考虑边界问题（是否还有足够的空间存放下一条指令）
         */
-        //todo: stall situation
-        if (preFetchQue.getStatus() != 0) {
+        if (preFetchQue.getStatus() != 0 && !ROB_is_stall) {
             //set the command
             binaryManager command;
-            command.setValue(preFetchQue.getFront());
+            command.setValue(preFetchQue.getFront().first);
             fetch_flag = true;
             //ID
             int Q1, Q2;
@@ -399,7 +438,6 @@ public:
                     rs1 = command.slice(15, 19);
                     basePtr = new StypeOperator;
                     Type = S;
-                    issueResult.isStore=true;
                     break;
                 case 51:
                     //R-type
@@ -413,9 +451,6 @@ public:
                     break;
             }
             basePtr->setValue(opcode, func3, func7, immediate, npc, Type);
-            issueResult.hasResult = true;
-            issueResult.isStore=false;
-            reserve_flag= true;
             int posROB = rob.getTail();
             if (rd != -1 && rd != 0) {
                 channelToRegfile.issue_rd = rd;
@@ -440,9 +475,29 @@ public:
             issueResult.rsNode.setValue(true, posROB, Q1, Q2, V1, V2, basePtr);
             if (opcode == 35 || opcode == 3) issueResult.toSLBuffer = true;
             else issueResult.toRS = true;
+            //ID end
+            issueResult.hasResult = true;
+            reserve_flag = true;
+            reserve_link_to_reg = (rd == 0) ? -1 : rd;
+            reserve_isJump = (opcode == 99 || opcode == 103);
+            reserve_predict_pc = preFetchQue.getFront().second;
+            issue_to_ex_flag = false;
+            if (issueResult.toRS && issueResult.rsNode.canEx()) {
+                //send to ex directly
+                issueResult.hasResult = false;
+                issue_to_ex_flag = true;
+                issue_to_ex_node = issueResult.rsNode;
+            }
+            //may not happen
+            if (issueResult.toRS && RS_is_stall || issueResult.toSLBuffer && SLBuffer_is_stall) {
+                issueResult.hasResult = false;
+                reserve_flag = false;
+                fetch_flag = false;
+            }
         } else {
-            reserve_flag= false;
+            reserve_flag = false;
             issueResult.hasResult = false;
+            fetch_flag = false;
         }
     }
 
@@ -455,21 +510,22 @@ public:
         4. 根据上个周期EX阶段或者SLBUFFER的计算得到的结果遍历Reservation Station，更新相应的值
         */
         //todo update with the result of ex or slbuffer
-        //todo stall
         if (exResult.hasResult) {
             for (int i = 0; i < QUEUE_SIZE; ++i)
                 if (rs(i).busy && rs(i).match(exResult.posROB))
-                    rs(i).setValue(exResult.posROB,exResult.value);
+                    rs(i).setValue(exResult.posROB, exResult.value);
+        }
+        if (slBuffer.hasResult) {
+            for (int i = 0; i < QUEUE_SIZE; ++i)
+                if (rs(i).busy && rs(i).match(slBuffer.posROB))
+                    rs(i).setValue(slBuffer.posROB, slBuffer.value);
         }
         //todo forward
-        //todo run issue directly
         if (issueResult.hasResult && issueResult.toRS) {
-            if (issueResult.rsNode.canEx()) rs.exNum = -2;
-            else {
-                rs.exNum = rs.scan();
-                rs.insert(issueResult.rsNode);
-            }
+            rs.exFlag = rs.scan();
+            rs.insert(issueResult.rsNode);
         }
+        RS_is_stall = rs.isFull();
     }
 
     void run_ex() {
@@ -479,19 +535,17 @@ public:
         tips: 考虑如何处理跳转指令并存储相关信息
               Store/Load的指令并不在这一部分进行处理
         */
-        if (rs.exNum == -1) {
-            exResult.hasResult = false;
-            return;
-        }
         exResult.hasResult = true;
-        if (rs.exNum == -2) {
-            RS_Node &tmp = issueResult.rsNode;
+        if (issue_to_ex_flag) {
+            RS_Node &tmp = issue_to_ex_node;
+            exResult.posROB = tmp.id;
+            tmp.opPtr->operate(exResult.value, tmp.V1, tmp.V2);
+        } else if (rs.exFlag) {
+            RS_Node &tmp = rs.exNode;
             exResult.posROB = tmp.id;
             tmp.opPtr->operate(exResult.value, tmp.V1, tmp.V2);
         } else {
-            RS_Node &tmp = rs[rs.exNum];
-            exResult.posROB = tmp.id;
-            tmp.opPtr->operate(exResult.value, tmp.V1, tmp.V2);
+            exResult.hasResult = false;
         }
     }
 
@@ -519,75 +573,84 @@ public:
 
            4）同时SLBUFFER还需根据上个周期EX和SLBUFFER的计算结果遍历SLBUFFER进行数据的更新。
         */
-        //todo: method 2
-        if (issueResult.hasResult && issueResult.toSLBuffer) {
-            if (slBuffer.isFull()) {
-
-            } else {
-                SLBufferNode tmp;
-                tmp.rsNode=issueResult.rsNode;
-                if (slBuffer.isEmpty()) {
-                    if (tmp.ready()) ++tmp.exCount;
-                } else {
-                    SLBufferNode& front=slBuffer.preQue.getFront();
-                    if (front.ready()) ++front.exCount;
-                    if (front.exCount==3) {
-                        unsigned int st;
-                        front.rsNode.opPtr->operate(st,front.rsNode.V1,front.rsNode.V2);
-                        if (front.rsNode.opPtr->opType==S) {
-                            switch (front.rsNode.opPtr->getFunc3()) {
-                                case 0:
-                                    //SB
-                                    memory[st]=(front.value] & 0b11111111);
-                                    break;
-                                case 1:
-                                    //SH
-                                    for (int i = st; i < st+2; ++i) {
-                                        memory[i]=front.valuet& 0b11111111;
-                                        front.value>>=8;
-                                    }
-                                    break;
-                                case 2:
-                                    //SW
-                                    for (int i = st; i < st+4; ++i) {
-                                        memory[i]=front.value & 0b11111111;
-                                        front.value>>=8;
-                                    }
-                                    break;
-                            }
-                        } else {
-                            unsigned char t;
-                                switch (front.rsNode.opPtr->getFunc3()) {
-                                    case 0:
-                                        //LB
-                                        t = memory[st];
-                                        reg[command.slice(7, 11)] = ((t & (1 << 7)) * ((1 << 24) - 1)<<1) + t;
-                                        break;
-                                    case 1:
-                                        //LH
-                                        t= combineChars(st,2);
-                                        reg[command.slice(7, 11)] = ((t & (1 << 15)) * ((1 << 16) - 1)<<1) + t;
-                                        break;
-                                    case 2:
-                                        //LW
-                                        reg[command.slice(7, 11)] = combineChars(st,4);
-                                        break;
-                                    case 4:
-                                        //LBU
-                                        reg[command.slice(7, 11)] =memory[st];
-                                        break;
-                                    case 5:
-                                        //LHU
-                                        reg[command.slice(7, 11)] = combineChars(st,2);
-                                        break;
-                                }
-                        }
-                    }
-
-                }
-                slBuffer.push(tmp);
-            }
+        if (exResult.hasResult) {
+            slBuffer.traverse(exResult.posROB, exResult.value);
         }
+        if (slBuffer.hasResult) {
+            slBuffer.traverse(slBuffer.posROB, slBuffer.value);
+        }
+        //todo: method 2
+        slBuffer.hasResult = false;
+        if (issueResult.hasResult && issueResult.toSLBuffer) {
+            SLBufferNode tmp;
+            tmp.rsNode = issueResult.rsNode;
+            if (slBuffer.isEmpty()) {
+                if (tmp.ready()) ++tmp.exCount;
+            } else {
+                SLBufferNode &front = slBuffer.preQue.getFront();
+                if (front.ready()) ++front.exCount;
+                if (front.exCount == 3) {
+                    unsigned int st;
+                    front.rsNode.opPtr->operate(st, front.rsNode.V1, front.rsNode.V2);
+                    if (front.rsNode.opPtr->opType == S) {
+                        switch (front.rsNode.opPtr->getFunc3()) {
+                            case 0:
+                                //SB
+                                memory[st] = (front.rsNode.V2 & 0b11111111);
+                                break;
+                            case 1:
+                                //SH
+                                for (int i = st; i < st + 2; ++i) {
+                                    memory[i] = front.rsNode.V2 & 0b11111111;
+                                    front.rsNode.V2 >>= 8;
+                                }
+                                break;
+                            case 2:
+                                //SW
+                                for (int i = st; i < st + 4; ++i) {
+                                    memory[i] = front.rsNode.V2 & 0b11111111;
+                                    front.rsNode.V2 >>= 8;
+                                }
+                                break;
+                        }
+                        slBuffer.isStore = true;
+                    } else {
+                        unsigned char t;
+                        switch (front.rsNode.opPtr->getFunc3()) {
+                            case 0:
+                                //LB
+                                t = memory[st];
+                                front.rsNode.V2 = ((t & (1 << 7)) * ((1 << 24) - 1) << 1) + t;
+                                break;
+                            case 1:
+                                //LH
+                                t = combineChars(st, 2);
+                                front.rsNode.V2 = ((t & (1 << 15)) * ((1 << 16) - 1) << 1) + t;
+                                break;
+                            case 2:
+                                //LW
+                                front.rsNode.V2 = combineChars(st, 4);
+                                break;
+                            case 4:
+                                //LBU
+                                front.rsNode.V2 = memory[st];
+                                break;
+                            case 5:
+                                //LHU
+                                front.rsNode.V2 = combineChars(st, 2);
+                                break;
+                        }
+                        slBuffer.value = front.rsNode.V2;
+                        slBuffer.isStore = false;
+                    }
+                    slBuffer.hasResult = true;
+                    slBuffer.posROB = front.rsNode.id;
+                    slBuffer.pop();
+                } else slBuffer.nextQue.getFront() = front;
+            }
+            slBuffer.push(tmp);
+        }
+        SLBuffer_is_stall = slBuffer.isFull();
     }
 
     void run_rob() {
@@ -599,19 +662,24 @@ public:
         3. 对于队首的指令，如果已经完成计算及更新，进行commit
         */
         if (reserve_flag) {
-            rob.reserve();
-            if (issueResult.isStore) rob.getFront().isStore;
+            int pos = rob.reserve();
+            rob(pos).linkToReg = reserve_link_to_reg;
+            rob(pos).isJump = reserve_isJump;
+            rob(pos).predict_pc = reserve_predict_pc;
+            reserve_flag = false;
         }
         if (commit_flag) rob.pop();
         if (exResult.hasResult) {
-            ROB_Node& tmp=rob(exResult.posROB);
-            tmp.hasValue= true;
-            tmp.value=exResult.value;
+            ROB_Node &tmp = rob(exResult.posROB);
+            tmp.hasValue = true;
+            tmp.value = exResult.value;
         }
-        if (slbResult.hasResult) {
-
+        if (slBuffer.hasResult) {
+            ROB_Node &tmp = rob(slBuffer.posROB);
+            tmp.hasValue = true;
+            if (!slBuffer.isStore)tmp.value = slBuffer.value;
         }
-        //todo commit
+        ROB_is_stall = rob.isFull();
     }
 
     void run_regfile() {
@@ -619,11 +687,11 @@ public:
         每个寄存器会记录Q和V，含义参考ppt。这一部分会进行写寄存器，内容包括：根据issue和commit的通知修改对应寄存器的Q和V。
         tip: 请注意issue和commit同一个寄存器时的情况
         */
-        if (channelToRegfile.commit_rd!=-1) {
-            regNext.reg[channelToRegfile.commit_rd]=channelToRegfile.commit_value;
-            if (regNext.Q[channelToRegfile.commit_rd]==channelToRegfile.id)regNext.Q[channelToRegfile.commit_rd]=0;
+        if (channelToRegfile.commit_rd != -1) {
+            regNext.reg[channelToRegfile.commit_rd] = channelToRegfile.commit_value;
+            if (regNext.Q[channelToRegfile.commit_rd] == channelToRegfile.id)regNext.Q[channelToRegfile.commit_rd] = 0;
         }
-        if (channelToRegfile.issue_rd!=-1) regNext.Q[channelToRegfile.issue_rd]=channelToRegfile.issue_pos;
+        if (channelToRegfile.issue_rd != -1) regNext.Q[channelToRegfile.issue_rd] = channelToRegfile.issue_pos;
     }
 
     void run_commit() {
@@ -632,13 +700,17 @@ public:
         1. 根据ROB发出的信息通知regfile修改相应的值，包括对应的ROB和是否被占用状态（注意考虑issue和commit同一个寄存器的情况）
         2. 遇到跳转指令更新pc值，并发出信号清空所有部分的信息存储（这条对于很多部分都有影响，需要慎重考虑）
         */
-        ROB_Node& tmp=rob.getFront();
-        commit_flag= false;
-        if (tmp.hasValue || tmp.isStore) {
-            channelToRegfile.commit_rd=tmp.linkToReg;
-            channelToRegfile.commit_value=tmp.value;
-            channelToRegfile.id=tmp.id;
-            commit_flag= true;
+        ROB_Node &tmp = rob.getFront();
+        commit_flag = false;
+        if (tmp.hasValue) {
+            commit_to_SLB=tmp.isStore;
+            channelToRegfile.commit_rd = tmp.linkToReg;
+            channelToRegfile.commit_value = tmp.value;
+            channelToRegfile.id = tmp.id;
+            if (tmp.isJump && tmp.predict_pc) {
+
+            }
+            commit_flag = true;
         }
     }
 
