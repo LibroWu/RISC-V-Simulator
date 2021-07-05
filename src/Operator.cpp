@@ -79,3 +79,4 @@ void StypeOperator::operate(unsigned int &reg_rd, unsigned int reg_rs1, unsigned
     reg_rd=reg_rs1+immediate;
 }
 unsigned char baseOperator::getFunc3() {return func3;}
+unsigned int baseOperator::getNpc() {return npc;}

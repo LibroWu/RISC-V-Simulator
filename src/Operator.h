@@ -5,9 +5,7 @@
 #ifndef CODE_OPERATOR_H
 #define CODE_OPERATOR_H
 
-enum OpType{
-    R,J,S,U,I,B;
-};
+enum OpType{R,J,S,U,I,B};
 
 class baseOperator {
 protected:
@@ -16,33 +14,34 @@ protected:
 public:
     OpType opType;
     unsigned char getFunc3();
+    unsigned int getNpc();
     virtual void operate(unsigned int& reg_rd,unsigned int reg_rs1,unsigned int reg_rs2)=0;
     void setValue(unsigned char opCode,unsigned char Func3,unsigned char Func7,unsigned int Immediate,unsigned int Npc,OpType type);
 };
 
 class RtypeOperator:public baseOperator{
 public:
-    virtual void operate(unsigned int& reg_rd,unsigned int reg_rs1,unsigned int reg_rs2) override;
+    void operate(unsigned int& reg_rd,unsigned int reg_rs1,unsigned int reg_rs2) override;
 };
 
 class ItypeOperator:public baseOperator{
 public:
-    virtual void operate(unsigned int& reg_rd,unsigned int reg_rs1,unsigned int reg_rs2) override;
+    void operate(unsigned int& reg_rd,unsigned int reg_rs1,unsigned int reg_rs2) override;
 };
 
 class StypeOperator:public baseOperator{
 public:
-    virtual void operate(unsigned int& reg_rd,unsigned int reg_rs1,unsigned int reg_rs2) override;
+    void operate(unsigned int& reg_rd,unsigned int reg_rs1,unsigned int reg_rs2) override;
 };
 
 class BtypeOperator:public baseOperator{
 public:
-    virtual void operate(unsigned int& reg_rd,unsigned int reg_rs1,unsigned int reg_rs2) override;
+    void operate(unsigned int& reg_rd,unsigned int reg_rs1,unsigned int reg_rs2) override;
 };
 
 class JtypeOperator:public baseOperator{
 public:
-    virtual void operate(unsigned int& reg_rd,unsigned int reg_rs1,unsigned int reg_rs2) override;
+    void operate(unsigned int& reg_rd,unsigned int reg_rs1,unsigned int reg_rs2) override;
 };
 
 class UtypeOperator:public baseOperator{

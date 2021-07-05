@@ -37,6 +37,8 @@ private:
         unsigned int &operator[](int pos) { return reg[pos]; }
 
         int &operator()(int pos) { return Q[pos]; }
+
+        void clearQ(){memset(Q, 0, sizeof(Q));};
     };
 
     struct SLBuffer;
@@ -84,10 +86,15 @@ private:
         T &getFront() { return que[head]; }
 
         T &operator[](int pos) { return que[pos - 1]; }
+
+        void clear(){
+            head=tail=0;
+            status=-1;
+        }
     };
 
     struct ROB_Node {
-        unsigned int value, predict_pc;
+        unsigned int value, predict_pc, npc;
         int linkToReg, id;
         bool hasValue, isJump, isStore;
 
@@ -117,9 +124,13 @@ private:
         ROB_Node &operator()(int pos) { return nextQue[pos]; }
 
         void pop() { nextQue.pop(); }
+
+        void clear(){
+            preQue.clear();
+            nextQue.clear();
+        }
     };
-
-
+    
     struct RS_Node {
         bool busy;
         int id, Q1, Q2, next;
@@ -160,6 +171,11 @@ private:
             ResultBuffer() : head(0) {
                 for (int i = 0; i < QUEUE_SIZE; ++i) rsQue[i].next = i + 1;
             }
+
+            void clear() {
+                head = 0;
+                for (int i = 0; i < QUEUE_SIZE; ++i) rsQue[i].next = i + 1;
+            }
         } preBuffer, nextBuffer;
 
         RS_Node exNode;
@@ -197,6 +213,11 @@ private:
         RS_Node &operator()(int pos) { return nextBuffer.rsQue[pos]; }
 
         bool isFull() { return nextBuffer.head == QUEUE_SIZE; }
+
+        void clear(){
+            preBuffer.clear();
+            nextBuffer.clear();
+        }
     };
 
     struct SLBufferNode {
@@ -258,6 +279,13 @@ private:
                 if (i == QUEUE_SIZE) i = 0;
             }
         }
+
+        void clear(){
+            SLBufferNode tmp=nextQue.getFront();
+            nextQue.clear();
+            if (tmp.exCount) nextQue.push(tmp);
+            preQue=nextQue;
+        }
     };
 
     //result buffer
@@ -268,7 +296,7 @@ private:
 
     struct ExResult {
         bool hasResult;
-        unsigned int value;
+        unsigned int value,npc;
         int posROB;
     };
 
@@ -292,7 +320,7 @@ private:
     IssueResult issueResult;
     ExResult exResult;
     ROB rob;
-    RS rs;
+    RS  rs;
     SLBuffer slBuffer;
     ChannelToRegfile channelToRegfile;
 public:
@@ -540,10 +568,12 @@ public:
             RS_Node &tmp = issue_to_ex_node;
             exResult.posROB = tmp.id;
             tmp.opPtr->operate(exResult.value, tmp.V1, tmp.V2);
+            exResult.npc=tmp.opPtr->getNpc();
         } else if (rs.exFlag) {
             RS_Node &tmp = rs.exNode;
             exResult.posROB = tmp.id;
             tmp.opPtr->operate(exResult.value, tmp.V1, tmp.V2);
+            exResult.npc=tmp.opPtr->getNpc();
         } else {
             exResult.hasResult = false;
         }
@@ -675,6 +705,7 @@ public:
             ROB_Node &tmp = rob(exResult.posROB);
             tmp.hasValue = true;
             tmp.value = exResult.value;
+            tmp.npc = exResult.npc;
         }
         if (slBuffer.hasResult) {
             ROB_Node &tmp = rob(slBuffer.posROB);
@@ -709,10 +740,19 @@ public:
             channelToRegfile.commit_rd = tmp.linkToReg;
             channelToRegfile.commit_value = tmp.value;
             channelToRegfile.id = tmp.id;
-            if (tmp.isJump && tmp.predict_pc) {
-
-            }
             commit_flag = true;
+            if (tmp.isJump && tmp.predict_pc!=tmp.npc) {
+                rs.clear();
+                rob.clear();
+                slBuffer.clear();
+                preFetchQue.clear();
+                nextFetchQue.clear();
+                regPre.clearQ();
+                regNext.clearQ();
+
+                pc=tmp.npc;
+                commit_flag = false;
+            }
         }
     }
 
