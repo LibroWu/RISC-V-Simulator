@@ -711,7 +711,6 @@ public:
         */
 
         slBuffer.hasResult = false;
-        bool flag= false;
         if (issueResult.hasResult && issueResult.toSLBuffer) {
             SLBufferNode tmp;
             tmp.rsNode = issueResult.rsNode;
