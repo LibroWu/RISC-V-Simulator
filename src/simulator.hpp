@@ -10,7 +10,7 @@
 #include "Operator.h"
 #include "binaryManager.h"
 
-const int QUEUE_SIZE = 1;
+const int QUEUE_SIZE = 2;
 const int mem_size = 4194304;
 #define debugs
 
