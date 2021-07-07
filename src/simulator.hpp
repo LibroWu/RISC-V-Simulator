@@ -908,6 +908,7 @@ public:
                     nextFetchQue.clear();
                     regPre.clearQ();
                     regNext.clearQ();
+                    channelToRegfile.clear();
 
                     next_pc = tmp.npc;
                     commit_flag = false;
