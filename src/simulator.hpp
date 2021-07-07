@@ -464,8 +464,8 @@ public:
             update();
 
             run_ex();
-            run_commit();
             run_issue();
+            run_commit();
         }
     }
 
