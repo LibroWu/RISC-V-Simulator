@@ -512,7 +512,7 @@ public:
             binaryManager command;
             command.setValue(preFetchQue.getFront().first);
             issueResult.code = command;
-            if (preFetchQue.getFront().third == 4336)
+/*            if (preFetchQue.getFront().third == 4336)
                 cout << "waeaweaw\n";
             std::cout << std::hex << preFetchQue.getFront().third << ' ' << (unsigned int) command << ' ' << regPre[1] << ' ' << regPre[2] << ' '
                       << regPre[10] << ' ' << regPre[15] << ' ' << regPre[14] << std::endl;
@@ -528,7 +528,7 @@ public:
                           << slBuffer.preQue.getFront().rsNode.Q2 << ' ' << slBuffer.preQue.getFront().hasCommit << ' '
                           << slBuffer.preQue.getFront().rsNode.id << ' ' << slBuffer.preQue.getFront().rsNode.V2 << ' '
                           << slBuffer.value << std::endl;
-            std::cout << "---------------------------------\n";
+            std::cout << "---------------------------------\n";*/
             fetch_flag = true;
             //ID
             bool illegal_command = false;
