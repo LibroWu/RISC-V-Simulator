@@ -10,7 +10,7 @@
 #include "Operator.h"
 #include "binaryManager.h"
 
-const int QUEUE_SIZE = 32;
+const int QUEUE_SIZE = 1;
 const int mem_size = 4194304;
 #define debugs
 
@@ -896,11 +896,12 @@ public:
                 if (tmp.isJump && tmp.predict_pc != tmp.npc) {
                     issueResult.hasResult = false;
                     issue_to_ex_flag = false;
-                    reserve_flag = false;
+                    reserve_flag = reserve_isStore = reserve_isJump = false;
                     fetch_flag = false;
                     exResult.hasResult = false;
                     rs.exFlag = false;
                     slBuffer.hasResult = false;
+                    ROB_is_stall = RS_is_stall = SLBuffer_is_stall = false;
                     rs.clear();
                     rob.clear();
                     slBuffer.clear();
