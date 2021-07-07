@@ -159,7 +159,7 @@ public:
 
     struct RS_Node {
         bool busy;
-        int id, Q1, Q2, next;
+        int id, Q1, Q2, next, origin_code;
         unsigned int V1, V2;
         baseOperator *opPtr;
 
@@ -322,7 +322,6 @@ public:
                 flag = false;
                 if (nextQue[i + 1].rsNode.id == posROB) {
                     nextQue[i + 1].hasCommit = true;
-                    break;
                 }
                 ++i;
                 if (i == QUEUE_SIZE) i = 0;
@@ -512,7 +511,7 @@ public:
             binaryManager command;
             command.setValue(preFetchQue.getFront().first);
             issueResult.code = command;
-/*            if (preFetchQue.getFront().third == 4336)
+/*            if (preFetchQue.getFront().third == 4204)
                 cout << "waeaweaw\n";
             std::cout << std::hex << preFetchQue.getFront().third << ' ' << (unsigned int) command << ' ' << regPre[1] << ' ' << regPre[2] << ' '
                       << regPre[10] << ' ' << regPre[15] << ' ' << regPre[14] << std::endl;
@@ -527,7 +526,7 @@ public:
                           << slBuffer.preQue.getFront().ready() << ' ' << slBuffer.preQue.getFront().rsNode.Q1 << ' '
                           << slBuffer.preQue.getFront().rsNode.Q2 << ' ' << slBuffer.preQue.getFront().hasCommit << ' '
                           << slBuffer.preQue.getFront().rsNode.id << ' ' << slBuffer.preQue.getFront().rsNode.V2 << ' '
-                          << slBuffer.value << std::endl;
+                          << slBuffer.preQue.getFront().rsNode.origin_code << std::endl;
             std::cout << "---------------------------------\n";*/
             fetch_flag = true;
             //ID
@@ -647,6 +646,7 @@ public:
                 reserve_isJump = (opcode == 99 || opcode == 103);
                 reserve_predict_pc = preFetchQue.getFront().second;
                 issue_to_ex_flag = false;
+                issueResult.rsNode.origin_code=reserve_origin_code;
                 if (issueResult.toRS && issueResult.rsNode.canEx()) {
                     //send to ex directly
                     issueResult.hasResult = false;
@@ -819,7 +819,7 @@ public:
         if (exResult.hasResult) {
             slBuffer.traverse(exResult.posROB, exResult.value);
         }
-        if (slBuffer.hasResult) {
+        if (slBuffer.hasResult && !slBuffer.isStore)  {
             slBuffer.traverse(slBuffer.posROB, slBuffer.value);
         }
         SLBuffer_is_stall = slBuffer.isFull();
