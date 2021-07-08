@@ -10,7 +10,7 @@
 #include "Operator.h"
 #include "binaryManager.h"
 
-const int QUEUE_SIZE = 2;
+const int QUEUE_SIZE = 32;
 const int mem_size = 4194304;
 #define debugs
 
@@ -355,11 +355,19 @@ public:
 
         void clear() {
             newHasResult = false;
+            std::vector<SLBufferNode> vec_slbuffer;
+            while (!(nextQue.getStatus() == -1) && nextQue.getFront().rsNode.opPtr->opType==S && nextQue.getFront().ready()) {
+               vec_slbuffer.push_back(nextQue.getFront());
+                nextQue.pop();
+            }
+            nextQue.clear();
+            for (int i = 0; i < vec_slbuffer.size(); ++i) nextQue.push(vec_slbuffer[i]);
+            /*
             bool flag = nextQue.getStatus() == -1;
             SLBufferNode tmp;
             if (!flag) tmp = nextQue.getFront();
             nextQue.clear();
-            if (!flag && tmp.ready()) nextQue.push(tmp);
+            if (!flag && tmp.ready()) nextQue.push(tmp);*/
             preQue = nextQue;
         }
     };
@@ -442,6 +450,8 @@ public:
     }
 
     unsigned int cycle = 0;
+    unsigned int reg_count = 0;
+    unsigned int mem_count = 0;
 
     void run() {
         while (true) {
@@ -453,7 +463,7 @@ public:
             */
             run_rob();
             if (code_from_rob_to_commit == 0x0ff00513) {
-                std::cout << std::dec << ((unsigned int) regPre[10] & 255u);
+                std::cout << std::dec << ((unsigned int) regPre[10] & 255u)<<std::endl;
                 break;
             }
             run_slbuffer();
@@ -511,7 +521,8 @@ public:
             binaryManager command;
             command.setValue(preFetchQue.getFront().first);
             issueResult.code = command;
-/*            if (preFetchQue.getFront().third == 4204)
+          //  std::cout << "(" << std::hex << preFetchQue.getFront().third << ' ' << (unsigned int) command<<")"<<std::dec<<std::endl;
+/*            if (preFetchQue.getFront().third == 4164)
                 cout << "waeaweaw\n";
             std::cout << std::hex << preFetchQue.getFront().third << ' ' << (unsigned int) command << ' ' << regPre[1] << ' ' << regPre[2] << ' '
                       << regPre[10] << ' ' << regPre[15] << ' ' << regPre[14] << std::endl;
@@ -758,22 +769,35 @@ public:
                     unsigned int st;
                     front.rsNode.opPtr->operate(st, front.rsNode.V1, front.rsNode.V2);
                     if (front.rsNode.opPtr->opType == S) {
+                        //std::cerr<<front.rsNode.origin_code<<std::endl;
                         switch (front.rsNode.opPtr->getFunc3()) {
                             case 0:
                                 //SB
                                 memory[st] = (front.rsNode.V2 & 0b11111111);
+                                ++mem_count;/*
+                                if (mem_count==251)
+                                    std::cout<<"Waeaweawe\n";*/
+                                //std::cerr<<"mem["<<st<<"]"<<int(memory[st])<<std::endl;
                                 break;
                             case 1:
                                 //SH
                                 for (int i = st; i < st + 2; ++i) {
                                     memory[i] = front.rsNode.V2 & 0b11111111;
+                                    ++mem_count;/*
+                                    if (mem_count==251)
+                                        std::cout<<"Waeaweawe\n";*/
+                                    //std::cerr<<"mem["<<i<<"]"<<int(memory[i])<<std::endl;
                                     front.rsNode.V2 >>= 8;
                                 }
                                 break;
                             case 2:
                                 //SW
                                 for (int i = st; i < st + 4; ++i) {
+                                    ++mem_count;/*
+                                    if (mem_count==251)
+                                        std::cout<<"Waeaweawe\n";*/
                                     memory[i] = front.rsNode.V2 & 0b11111111;
+                                    //std::cerr<<"mem["<<i<<"]"<<int(memory[i])<<std::endl;
                                     front.rsNode.V2 >>= 8;
                                 }
                                 break;
@@ -869,6 +893,9 @@ public:
         */
         if (channelToRegfile.commit_rd != -1) {
             regNext.reg[channelToRegfile.commit_rd] = channelToRegfile.commit_value;
+/*            if (channelToRegfile.commit_rd==18 && regNext.reg[channelToRegfile.commit_rd]== 131048)
+                cout<<"Daweaweawesdqwa\n";*/
+           // cout<<std::dec<<"reg["<<channelToRegfile.commit_rd<<"] "<<regNext.reg[channelToRegfile.commit_rd]<<std::hex<<std::endl;
             if (regNext.Q[channelToRegfile.commit_rd] == channelToRegfile.id)regNext.Q[channelToRegfile.commit_rd] = 0;
         }
         if (channelToRegfile.issue_rd != -1) regNext.Q[channelToRegfile.issue_rd] = channelToRegfile.issue_pos;
@@ -885,7 +912,12 @@ public:
         commit_flag = false;
         if (!rob.isEmpty()) {
             ROB_Node tmp = rob.getFront();
-            if (tmp.hasValue) {
+            if (tmp.hasValue) {/*
+                if (tmp.isJump) {
+                    if (tmp.origin_code == 0X8067)
+                        cout<<"Awedawedaw";
+                    cout<<std::hex<<"***"<<tmp.origin_code<<" "<<(tmp.predict_pc==tmp.npc)<<"***"<<std::dec<<std::endl;
+                }*/
                 commit_to_SLB = tmp.isStore;
                 commit_to_SLB_id = tmp.id;
                 channelToRegfile.commit_rd = tmp.linkToReg;

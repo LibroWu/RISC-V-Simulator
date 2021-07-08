@@ -14,6 +14,8 @@ private:
     unsigned char memory[500000];
 
     unsigned int combineChars(int pos=-1,unsigned char len=4);
+
+    unsigned int reg_count = 0;
 public:
     riscVRunByOrder();
 

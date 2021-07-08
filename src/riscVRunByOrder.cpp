@@ -47,6 +47,7 @@ unsigned int riscVRunByOrder::combineChars(int pos,unsigned char len) {
 }
 
 void riscVRunByOrder::runCommand() {
+    std::cerr<<pc<<std::endl;
     if (combineChars()==267388179) {
         std::cout<<((reg[10]) & 255u);
         exit(0);
@@ -59,19 +60,28 @@ void riscVRunByOrder::runCommand() {
         case 55:
             //LUI U-type
             immediate=command.slice(12,31)<<12;
-            if (command.slice(7, 11))reg[command.slice(7, 11)]=immediate;
+            if (command.slice(7, 11)) {
+                reg[command.slice(7, 11)]=immediate;
+                std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
+            }
             pc+=4;
             break;
         case 23:
             //AUIPC U-type
             immediate=command.slice(12,31)<<12;
-            if (command.slice(7, 11)) reg[command.slice(7, 11)]= pc +immediate;
+            if (command.slice(7, 11)) {
+                reg[command.slice(7, 11)]= pc +immediate;
+                std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
+            }
             pc +=4;
             break;
         case 111:
             //JAL J-type
             immediate=(command[31]*((1<<12)-1)<<20)+(command.slice(12,19)<<12)+(command[20]<<11)+(command.slice(25,30)<<5)+(command.slice(21,24)<<1);
-            if (command.slice(7, 11))reg[command.slice(7, 11)]= pc + 4;
+            if (command.slice(7, 11)){
+                reg[command.slice(7, 11)]= pc + 4;
+                std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
+            }
             pc+=immediate;
             break;
         case 103:
@@ -79,7 +89,10 @@ void riscVRunByOrder::runCommand() {
             immediate=(command[31]*((1<<21)-1)<<11)+command.slice(20,30);
             t=pc+4;
             pc= (reg[command.slice(15, 19)] + immediate) & ~1;
-            if (command.slice(7, 11))reg[command.slice(7, 11)]=t;
+            if (command.slice(7, 11)){
+                reg[command.slice(7, 11)]=t;
+                std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
+            }
             break;
         case 99:
             //B-type
@@ -133,23 +146,28 @@ void riscVRunByOrder::runCommand() {
                         //LB
                         t = memory[st];
                         reg[command.slice(7, 11)] = ((t & (1 << 7)) * ((1 << 24) - 1)<<1) + t;
+                        std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         break;
                     case 1:
                         //LH
                         t= combineChars(st,2);
                         reg[command.slice(7, 11)] = ((t & (1 << 15)) * ((1 << 16) - 1)<<1) + t;
+                        std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         break;
                     case 2:
                         //LW
                         reg[command.slice(7, 11)] = combineChars(st,4);
+                        std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         break;
                     case 4:
                         //LBU
                         reg[command.slice(7, 11)] =memory[st];
+                        std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         break;
                     case 5:
                         //LHU
                         reg[command.slice(7, 11)] = combineChars(st,2);
+                        std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         break;
                 }
             }
@@ -159,16 +177,19 @@ void riscVRunByOrder::runCommand() {
             //S-type
             immediate=(command[31]*((1<<21)-1)<<11)+(command.slice(25,30)<<5)+(command.slice(8,11)<<1)+command[7];
             st= reg[command.slice(15, 19)] + immediate;
+            std::cerr<<command<<std::endl;
             switch (command.slice(12,14)) {
                 case 0:
                     //SB
                     memory[st]=(reg[command.slice(20, 24)] & 0b11111111);
+                    std::cerr<<"mem["<<st<<"]"<<int(memory[st])<<std::endl;
                     break;
                 case 1:
                     //SH
                     t=reg[command.slice(20, 24)];
                     for (int i = st; i < st+2; ++i) {
                         memory[i]=t& 0b11111111;
+                        std::cout<<"mem["<<i<<"]"<<int(memory[i])<<std::endl;
                         t>>=8;
                     }
                     break;
@@ -177,6 +198,7 @@ void riscVRunByOrder::runCommand() {
                     t=reg[command.slice(20, 24)];
                     for (int i = st; i < st+4; ++i) {
                         memory[i]=t & 0b11111111;
+                        std::cerr<<"mem["<<i<<"]"<<int(memory[i])<<std::endl;
                         t>>=8;
                     }
                     break;
@@ -191,39 +213,48 @@ void riscVRunByOrder::runCommand() {
                     case 0:
                         //ADDI
                         reg[command.slice(7, 11)] = reg[command.slice(15, 19)] + immediate;
+                        std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         break;
                     case 1:
                         //SLLI
                         reg[command.slice(7, 11)] =reg[command.slice(15,19)]<< command.slice(20, 24);
+                        std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         break;
                     case 2:
                         //SLTI
                         reg[command.slice(7, 11)] = int(reg[command.slice(15, 19)]) < int(immediate);
+                        std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         break;
                     case 3:
                         //SLTIU
                         reg[command.slice(7, 11)] = reg[command.slice(15, 19)] < immediate;
+                        std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         break;
                     case 4:
                         //XORI
                         reg[command.slice(7, 11)] = reg[command.slice(15, 19)] ^ immediate;
+                        std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         break;
                     case 5:
                         if (command[30]) {
                             //SRAI
                             reg[command.slice(7, 11)] = int(reg[command.slice(7, 11)]) >> command.slice(20, 24);
+                            std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         } else {
                             //SRLI
                             reg[command.slice(7, 11)] = reg[command.slice(7, 11)] >> command.slice(20, 24);
+                            std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         }
                         break;
                     case 6:
                         //ORI
                         reg[command.slice(7, 11)] = reg[command.slice(15, 19)] | immediate;
+                        std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         break;
                     case 7:
                         //ANDI
                         reg[command.slice(7, 11)] = reg[command.slice(15, 19)] & immediate;
+                        std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         break;
                 }
             }
@@ -237,43 +268,53 @@ void riscVRunByOrder::runCommand() {
                         if (command[30]) {
                             //SUB
                             reg[command.slice(7, 11)] = reg[command.slice(15, 19)] - reg[command.slice(20, 24)];
+                            std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         } else {
                             //ADD
                             reg[command.slice(7, 11)] = reg[command.slice(15, 19)] + reg[command.slice(20, 24)];
+                            std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         }
                         break;
                     case 1:
                         //SLL
                         reg[command.slice(7, 11)] = reg[command.slice(15, 19)] << reg[command.slice(20, 24)];
+                        std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         break;
                     case 2:
                         //SLT
                         reg[command.slice(7, 11)] = int(reg[command.slice(15, 19)]) < int(reg[command.slice(20, 24)]);
+                        std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         break;
                     case 3:
                         //SLTU
                         reg[command.slice(7, 11)] = reg[command.slice(15, 19)] < reg[command.slice(20, 24)];
+                        std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         break;
                     case 4:
                         //XOR
                         reg[command.slice(7, 11)] = reg[command.slice(15, 19)] ^ reg[command.slice(20, 24)];
+                        std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         break;
                     case 5:
                         if (command[30]) {
                             //SRA
                             reg[command.slice(7, 11)] = int(reg[command.slice(15, 19)]) >> reg[command.slice(20, 24)];
+                            std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         } else {
                             //SRL
                             reg[command.slice(7, 11)] = reg[command.slice(15, 19)] >> reg[command.slice(20, 24)];
+                            std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         }
                         break;
                     case 6:
                         //OR
                         reg[command.slice(7, 11)] = reg[command.slice(15, 19)] | reg[command.slice(20, 24)];
+                        std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         break;
                     case 7:
                         //AND
                         reg[command.slice(7, 11)] = reg[command.slice(15, 19)] & reg[command.slice(20, 24)];
+                        std::cout<<"reg["<<command.slice(7, 11)<<"] "<<reg[command.slice(7, 11)]<<std::endl;
                         break;
                 }
             }
