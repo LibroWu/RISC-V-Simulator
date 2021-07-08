@@ -425,7 +425,7 @@ private:
     SLBuffer slBuffer;
     ChannelToRegfile channelToRegfile;
 
-    std::vector<baseOperator *> vec_basePtr;
+    loopQueue<baseOperator *,1000> vec_basePtr;
 public:
     simulator() : pc(0), next_pc(0), memory(new unsigned char[mem_size]) {
         RS_is_stall = ROB_is_stall = SLBuffer_is_stall = false;
@@ -615,7 +615,11 @@ public:
                     illegal_command = true;
             }
             if (!illegal_command) {
-                vec_basePtr.push_back(basePtr);
+                if (vec_basePtr.getStatus()==1) {
+                    delete vec_basePtr.getFront();
+                    vec_basePtr.pop();
+                }
+                vec_basePtr.push(basePtr);
                 basePtr->setValue(opcode, func3, func7, immediate, npc, Type);
                 int posROB = rob.getTail();
                 if (rd != -1 && rd != 0) {
@@ -969,7 +973,10 @@ public:
 
     ~simulator() {
         delete[] memory;
-        for (int i = 0; i < vec_basePtr.size(); ++i) delete vec_basePtr[i];
+        while (vec_basePtr.getStatus()!=-1) {
+            delete vec_basePtr.getFront();
+            vec_basePtr.pop();
+        }
     }
 };
 
