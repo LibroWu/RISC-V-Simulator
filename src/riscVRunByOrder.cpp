@@ -47,7 +47,7 @@ unsigned int riscVRunByOrder::combineChars(int pos,unsigned char len) {
 }
 
 void riscVRunByOrder::runCommand() {
-    std::cerr<<pc<<std::endl;
+    //std::cerr<<pc<<std::endl;
     if (combineChars()==267388179) {
         std::cout<<((reg[10]) & 255u);
         exit(0);
@@ -177,7 +177,8 @@ void riscVRunByOrder::runCommand() {
             //S-type
             immediate=(command[31]*((1<<21)-1)<<11)+(command.slice(25,30)<<5)+(command.slice(8,11)<<1)+command[7];
             st= reg[command.slice(15, 19)] + immediate;
-            std::cerr<<command<<std::endl;
+            std::cerr<<std::hex<<command<<std::dec<<std::endl;
+            //std::cout<<command<<std::endl;
             switch (command.slice(12,14)) {
                 case 0:
                     //SB
@@ -189,7 +190,7 @@ void riscVRunByOrder::runCommand() {
                     t=reg[command.slice(20, 24)];
                     for (int i = st; i < st+2; ++i) {
                         memory[i]=t& 0b11111111;
-                        std::cout<<"mem["<<i<<"]"<<int(memory[i])<<std::endl;
+                        std::cerr<<"mem["<<i<<"]"<<int(memory[i])<<std::endl;
                         t>>=8;
                     }
                     break;

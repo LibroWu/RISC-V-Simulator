@@ -11,12 +11,14 @@ int main(){
 //    std::ofstream out("out.txt");
 //	std::streambuf *default_buf=std::cout.rdbuf();
 //	std::cout.rdbuf( out.rdbuf() );
-/*    freopen("simulator.out","w",stdout);
-    freopen("simulatorErr.out","w",stderr);*/
+/*
+    freopen("simulator.out","w",stdout);
+    freopen("simulatorErr.out","w",stderr);
+*/
     simulator ans;
     ans.scan();
-    ans.run();
-/*    fclose(stdout);
+    ans.run();/*
+    fclose(stdout);
     fclose(stderr);
     freopen("byOrder.out","w",stdout);
     freopen("byOrderErr.out","w",stderr);

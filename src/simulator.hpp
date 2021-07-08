@@ -521,7 +521,7 @@ public:
             binaryManager command;
             command.setValue(preFetchQue.getFront().first);
             issueResult.code = command;
-          //  std::cout << "(" << std::hex << preFetchQue.getFront().third << ' ' << (unsigned int) command<<")"<<std::dec<<std::endl;
+         //   std::cout << "(" << std::hex << preFetchQue.getFront().third << ' ' << (unsigned int) command<<")"<<std::dec<<std::endl;
 /*            if (preFetchQue.getFront().third == 4164)
                 cout << "waeaweaw\n";
             std::cout << std::hex << preFetchQue.getFront().third << ' ' << (unsigned int) command << ' ' << regPre[1] << ' ' << regPre[2] << ' '
@@ -769,7 +769,8 @@ public:
                     unsigned int st;
                     front.rsNode.opPtr->operate(st, front.rsNode.V1, front.rsNode.V2);
                     if (front.rsNode.opPtr->opType == S) {
-                        //std::cerr<<front.rsNode.origin_code<<std::endl;
+                       // std::cerr<<std::hex<<front.rsNode.origin_code<<std::dec<<std::endl;
+                        //std::cout<<front.rsNode.origin_code<<std::endl;
                         switch (front.rsNode.opPtr->getFunc3()) {
                             case 0:
                                 //SB
@@ -797,12 +798,13 @@ public:
                                     if (mem_count==251)
                                         std::cout<<"Waeaweawe\n";*/
                                     memory[i] = front.rsNode.V2 & 0b11111111;
-                                    //std::cerr<<"mem["<<i<<"]"<<int(memory[i])<<std::endl;
+                                   // std::cerr<<"mem["<<i<<"]"<<int(memory[i])<<std::endl;
                                     front.rsNode.V2 >>= 8;
                                 }
                                 break;
                         }
                         slBuffer.newIsStore = true;
+                        slBuffer.newHasResult = false;
                     } else {
                         unsigned char t;
                         switch (front.rsNode.opPtr->getFunc3()) {
@@ -831,8 +833,9 @@ public:
                         }
                         slBuffer.newValue = front.rsNode.V2;
                         slBuffer.newIsStore = false;
+                        slBuffer.newHasResult = true;
                     }
-                    slBuffer.newHasResult = true;
+
                     slBuffer.newPosROB = front.rsNode.id;
                     slBuffer.pop();
                 } else slBuffer.nextQue.getFront() = front;
@@ -895,7 +898,9 @@ public:
             regNext.reg[channelToRegfile.commit_rd] = channelToRegfile.commit_value;
 /*            if (channelToRegfile.commit_rd==18 && regNext.reg[channelToRegfile.commit_rd]== 131048)
                 cout<<"Daweaweawesdqwa\n";*/
-           // cout<<std::dec<<"reg["<<channelToRegfile.commit_rd<<"] "<<regNext.reg[channelToRegfile.commit_rd]<<std::hex<<std::endl;
+/*            if (channelToRegfile.commit_rd==13 && regNext.reg[channelToRegfile.commit_rd]==400673)
+                std::cout<<"waeaweaweqa\n";*/
+  //         cout<<std::dec<<"reg["<<channelToRegfile.commit_rd<<"] "<<regNext.reg[channelToRegfile.commit_rd]<<std::hex<<std::endl;
             if (regNext.Q[channelToRegfile.commit_rd] == channelToRegfile.id)regNext.Q[channelToRegfile.commit_rd] = 0;
         }
         if (channelToRegfile.issue_rd != -1) regNext.Q[channelToRegfile.issue_rd] = channelToRegfile.issue_pos;
