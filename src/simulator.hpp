@@ -470,7 +470,7 @@ public:
             run_rob();
             if (code_from_rob_to_commit == 0x0ff00513) {
                 std::cout << std::dec << ((unsigned int) regPre[10] & 255u)<<std::endl;
-                std::cout << std::dec << ((unsigned int) cycle)<<std::endl;
+                //std::cout << std::dec << ((unsigned int) cycle)<<std::endl;
                 break;
             }
             run_slbuffer();
