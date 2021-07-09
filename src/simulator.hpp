@@ -112,7 +112,7 @@ public:
     };
 
     struct ROB_Node {
-        unsigned int value, predict_pc, npc, origin_code;
+        unsigned int value, predict_pc, npc, origin_code, prePc;
         int linkToReg, id;
         bool hasValue, isJump, isStore;
 
@@ -407,7 +407,7 @@ public:
 
 private:
     //private variable
-    unsigned int pc, next_pc, code_from_rob_to_commit, reserve_predict_pc, reserve_origin_code;
+    unsigned int pc, next_pc, code_from_rob_to_commit, reserve_predict_pc, reserve_origin_code, reserve_pre_pc;
     unsigned char *memory;
     int reserve_link_to_reg, commit_to_SLB_id;
     regFile regPre, regNext;
@@ -426,12 +426,18 @@ private:
     ChannelToRegfile channelToRegfile;
 
     loopQueue<baseOperator *,1000> vec_basePtr;
+
+    char predict[4096];
+
+    unsigned int HASH(unsigned int pc) { return  (pc>>2)&0xfff;}
+
 public:
     simulator() : pc(0), next_pc(0), memory(new unsigned char[mem_size]) {
         RS_is_stall = ROB_is_stall = SLBuffer_is_stall = false;
         issue_to_ex_flag = commit_flag = commit_to_SLB = reserve_flag = reserve_isStore = reserve_isJump = fetch_flag = false;
         reserve_origin_code = 0;
         memset(memory, 0, sizeof(memory));
+        memset(predict,0, sizeof(predict));
     }
 
     void scan() {
@@ -464,7 +470,7 @@ public:
             run_rob();
             if (code_from_rob_to_commit == 0x0ff00513) {
                 std::cout << std::dec << ((unsigned int) regPre[10] & 255u)<<std::endl;
-                //std::cout << std::dec << ((unsigned int) cycle)<<std::endl;
+                std::cout << std::dec << ((unsigned int) cycle)<<std::endl;
                 break;
             }
             run_slbuffer();
@@ -497,6 +503,11 @@ public:
                 //JAL J-type
                 next_pc = pc + (command[31] * ((1 << 12) - 1) << 20) + (command.slice(12, 19) << 12) +
                           (command[20] << 11) + (command.slice(25, 30) << 5) + (command.slice(21, 24) << 1);
+            } else if (command.slice(0,6)==99) {
+                //branch predict
+                unsigned int immediate =(command[31] * ((1 << 20) - 1) << 12) + (command[7] << 11) + (command.slice(25, 30) << 5) +
+                        (command.slice(8, 11) << 1);
+                next_pc=(predict[HASH(pc)]<2)?pc+4:pc+immediate;
             } else next_pc = pc + 4;
             nextFetchQue.push({(unsigned int) command, next_pc, pc});
         }
@@ -656,6 +667,7 @@ public:
                 //set the signal
                 issueResult.hasResult = true;
                 reserve_flag = true;
+                reserve_pre_pc = preFetchQue.getFront().third;
                 reserve_isStore = issueResult.rsNode.opPtr->opType == S;
                 reserve_origin_code = (unsigned int) (command);
                 reserve_link_to_reg = (rd == 0) ? -1 : rd;
@@ -870,6 +882,7 @@ public:
         */
         if (reserve_flag) {
             int pos = rob.reserve();
+            rob(pos).prePc = reserve_pre_pc;
             rob(pos).linkToReg = reserve_link_to_reg;
             rob(pos).isStore = reserve_isStore;
             if (reserve_isStore) rob(pos).hasValue = true;
@@ -938,6 +951,14 @@ public:
                 channelToRegfile.id = tmp.id;
                 commit_flag = true;
                 code_from_rob_to_commit = tmp.origin_code;
+                if (tmp.isJump) {
+                    if (tmp.predict_pc==tmp.npc) {
+                        ++predict[HASH(tmp.prePc)];
+                        predict[HASH(tmp.prePc)]&=0b11;
+                    } else {
+                        if (predict[HASH(tmp.prePc)]) --predict[HASH(tmp.prePc)];
+                    }
+                }
                 if (tmp.isJump && tmp.predict_pc != tmp.npc) {
                     issueResult.hasResult = false;
                     issue_to_ex_flag = false;
