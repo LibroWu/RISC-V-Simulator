@@ -464,6 +464,7 @@ public:
             run_rob();
             if (code_from_rob_to_commit == 0x0ff00513) {
                 std::cout << std::dec << ((unsigned int) regPre[10] & 255u)<<std::endl;
+                //std::cout << std::dec << ((unsigned int) cycle)<<std::endl;
                 break;
             }
             run_slbuffer();
@@ -690,8 +691,11 @@ public:
         if (issueResult.hasResult && issueResult.toRS) {
             rs.insert(issueResult.rsNode);
         }
-        if (!issue_to_ex_flag) rs.exFlag = rs.scan();
-        else rs.exFlag = false;
+        rs.exFlag = rs.scan();
+        if (rs.exFlag && issue_to_ex_flag) {
+            rs.insert(issue_to_ex_node);
+            issue_to_ex_flag= false;
+        }
         //todo update with the result of ex or slbuffer
         if (exResult.hasResult) {
             for (int i = 0; i < QUEUE_SIZE; ++i)
