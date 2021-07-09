@@ -428,8 +428,8 @@ private:
 
     loopQueue<baseOperator *, 1000> vec_basePtr;
 
-    char predict[4096];
-
+    char predict[4096],history[4096];
+    bool predictTable[4096][4];
     unsigned int HASH(unsigned int pc) { return (pc >> 2) & 0xfff; }
 
 public:
@@ -439,6 +439,10 @@ public:
         reserve_origin_code = 0;
         memset(memory, 0, sizeof(memory));
         for (int i = 0; i < 4096; ++i) predict[i] = 1;
+        memset(predictTable,0,sizeof(predictTable));
+        for (int i = 0; i < 4096; ++i)
+            for (int j = 0; j < 4; ++j) predictTable[i][j] = 1;
+        memset(history,0, sizeof(history));
     }
 
     void scan() {
@@ -511,7 +515,7 @@ public:
                 unsigned int immediate =
                         (command[31] * ((1 << 20) - 1) << 12) + (command[7] << 11) + (command.slice(25, 30) << 5) +
                         (command.slice(8, 11) << 1);
-                next_pc = (predict[HASH(pc)] < 2) ? pc + 4 : pc + immediate;
+                next_pc = (predictTable[HASH(pc)][history[HASH(pc)]]) ?pc + immediate: pc + 4;
             } else next_pc = pc + 4;
             nextFetchQue.push({(unsigned int) command, next_pc, pc});
         }
@@ -956,27 +960,11 @@ public:
                 commit_flag = true;
                 code_from_rob_to_commit = tmp.origin_code;
                 if (tmp.isJump) {
-                    if (tmp.predict_pc == tmp.npc) {
-                        ++predict_correct;
-                        if (tmp.predict_pc==tmp.prePc+4) {
-                            //predict not jump and correct
-                            if (predict[HASH(tmp.prePc)]) --predict[HASH(tmp.prePc)];
-                        } else {
-                            //predict jump and correct
-                            ++predict[HASH(tmp.prePc)];
-                            predict[HASH(tmp.prePc)] &= 0b11;
-                        }
-                    } else {
-                        ++predict_fail;
-                        if (tmp.predict_pc==tmp.prePc+4) {
-                            //predict not jump and fail
-                            ++predict[HASH(tmp.prePc)];
-                            predict[HASH(tmp.prePc)] &= 0b11;
-                        } else {
-                            //predict jump and fail
-                            if (predict[HASH(tmp.prePc)]) --predict[HASH(tmp.prePc)];
-                        }
-                    }
+                    predictTable[HASH(tmp.prePc)][history[HASH(tmp.prePc)]]=(tmp.predict_pc!=tmp.prePc+4);
+                    history[HASH(tmp.prePc)]=(history[HASH(tmp.prePc)]<<1)|(tmp.predict_pc!=tmp.prePc+4);
+                    history[HASH(tmp.prePc)]&=0b11;
+                    if (tmp.predict_pc == tmp.npc) ++predict_correct;
+                    else ++predict_fail;
                 }
                 if (tmp.isJump && tmp.predict_pc != tmp.npc) {
                     issueResult.hasResult = false;
