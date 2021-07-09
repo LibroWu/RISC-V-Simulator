@@ -356,8 +356,9 @@ public:
         void clear() {
             newHasResult = false;
             std::vector<SLBufferNode> vec_slbuffer;
-            while (!(nextQue.getStatus() == -1) && nextQue.getFront().rsNode.opPtr->opType==S && nextQue.getFront().ready()) {
-               vec_slbuffer.push_back(nextQue.getFront());
+            while (!(nextQue.getStatus() == -1) && nextQue.getFront().rsNode.opPtr->opType == S &&
+                   nextQue.getFront().ready()) {
+                vec_slbuffer.push_back(nextQue.getFront());
                 nextQue.pop();
             }
             nextQue.clear();
@@ -407,7 +408,7 @@ public:
 
 private:
     //private variable
-    unsigned int pc, next_pc, code_from_rob_to_commit, reserve_predict_pc, reserve_origin_code, reserve_pre_pc;
+    unsigned int pc, next_pc, code_from_rob_to_commit, reserve_predict_pc, reserve_origin_code, reserve_pre_pc, predict_correct, predict_fail;
     unsigned char *memory;
     int reserve_link_to_reg, commit_to_SLB_id;
     regFile regPre, regNext;
@@ -425,19 +426,19 @@ private:
     SLBuffer slBuffer;
     ChannelToRegfile channelToRegfile;
 
-    loopQueue<baseOperator *,1000> vec_basePtr;
+    loopQueue<baseOperator *, 1000> vec_basePtr;
 
     char predict[4096];
 
-    unsigned int HASH(unsigned int pc) { return  (pc>>2)&0xfff;}
+    unsigned int HASH(unsigned int pc) { return (pc >> 2) & 0xfff; }
 
 public:
-    simulator() : pc(0), next_pc(0), memory(new unsigned char[mem_size]) {
+    simulator() : pc(0), next_pc(0), memory(new unsigned char[mem_size]), predict_correct(0), predict_fail(0) {
         RS_is_stall = ROB_is_stall = SLBuffer_is_stall = false;
         issue_to_ex_flag = commit_flag = commit_to_SLB = reserve_flag = reserve_isStore = reserve_isJump = fetch_flag = false;
         reserve_origin_code = 0;
         memset(memory, 0, sizeof(memory));
-        memset(predict,0, sizeof(predict));
+        for (int i = 0; i < 4096; ++i) predict[i] = 1;
     }
 
     void scan() {
@@ -469,8 +470,10 @@ public:
             */
             run_rob();
             if (code_from_rob_to_commit == 0x0ff00513) {
-                std::cout << std::dec << ((unsigned int) regPre[10] & 255u)<<std::endl;
-                //std::cout << std::dec << ((unsigned int) cycle)<<std::endl;
+                std::cout << std::dec << ((unsigned int) regPre[10] & 255u) << std::endl;
+                std::cout << std::dec << ((unsigned int) cycle) << std::endl;
+                std::cout << std::dec << ((unsigned int) predict_correct)<<"/" << ((unsigned int) predict_fail)  << std::endl;
+                std::cout << std::dec << ((predict_fail==0)?1:((double) predict_correct/(predict_correct+predict_fail))) << std::endl;
                 break;
             }
             run_slbuffer();
@@ -503,11 +506,12 @@ public:
                 //JAL J-type
                 next_pc = pc + (command[31] * ((1 << 12) - 1) << 20) + (command.slice(12, 19) << 12) +
                           (command[20] << 11) + (command.slice(25, 30) << 5) + (command.slice(21, 24) << 1);
-            } else if (command.slice(0,6)==99) {
+            } else if (command.slice(0, 6) == 99) {
                 //branch predict
-                unsigned int immediate =(command[31] * ((1 << 20) - 1) << 12) + (command[7] << 11) + (command.slice(25, 30) << 5) +
+                unsigned int immediate =
+                        (command[31] * ((1 << 20) - 1) << 12) + (command[7] << 11) + (command.slice(25, 30) << 5) +
                         (command.slice(8, 11) << 1);
-                next_pc=(predict[HASH(pc)]<2)?pc+4:pc+immediate;
+                next_pc = (predict[HASH(pc)] < 2) ? pc + 4 : pc + immediate;
             } else next_pc = pc + 4;
             nextFetchQue.push({(unsigned int) command, next_pc, pc});
         }
@@ -533,7 +537,7 @@ public:
             binaryManager command;
             command.setValue(preFetchQue.getFront().first);
             issueResult.code = command;
-         //   std::cout << "(" << std::hex << preFetchQue.getFront().third << ' ' << (unsigned int) command<<")"<<std::dec<<std::endl;
+            //   std::cout << "(" << std::hex << preFetchQue.getFront().third << ' ' << (unsigned int) command<<")"<<std::dec<<std::endl;
 /*            if (preFetchQue.getFront().third == 4164)
                 cout << "waeaweaw\n";
             std::cout << std::hex << preFetchQue.getFront().third << ' ' << (unsigned int) command << ' ' << regPre[1] << ' ' << regPre[2] << ' '
@@ -627,7 +631,7 @@ public:
                     illegal_command = true;
             }
             if (!illegal_command) {
-                if (vec_basePtr.getStatus()==1) {
+                if (vec_basePtr.getStatus() == 1) {
                     delete vec_basePtr.getFront();
                     vec_basePtr.pop();
                 }
@@ -674,7 +678,7 @@ public:
                 reserve_isJump = (opcode == 99 || opcode == 103);
                 reserve_predict_pc = preFetchQue.getFront().second;
                 issue_to_ex_flag = false;
-                issueResult.rsNode.origin_code=reserve_origin_code;
+                issueResult.rsNode.origin_code = reserve_origin_code;
                 if (issueResult.toRS && issueResult.rsNode.canEx()) {
                     //send to ex directly
                     issueResult.hasResult = false;
@@ -706,7 +710,7 @@ public:
         rs.exFlag = rs.scan();
         if (rs.exFlag && issue_to_ex_flag) {
             rs.insert(issue_to_ex_node);
-            issue_to_ex_flag= false;
+            issue_to_ex_flag = false;
         }
         //todo update with the result of ex or slbuffer
         if (exResult.hasResult) {
@@ -789,7 +793,7 @@ public:
                     unsigned int st;
                     front.rsNode.opPtr->operate(st, front.rsNode.V1, front.rsNode.V2);
                     if (front.rsNode.opPtr->opType == S) {
-                       // std::cerr<<std::hex<<front.rsNode.origin_code<<std::dec<<std::endl;
+                        // std::cerr<<std::hex<<front.rsNode.origin_code<<std::dec<<std::endl;
                         //std::cout<<front.rsNode.origin_code<<std::endl;
                         switch (front.rsNode.opPtr->getFunc3()) {
                             case 0:
@@ -818,7 +822,7 @@ public:
                                     if (mem_count==251)
                                         std::cout<<"Waeaweawe\n";*/
                                     memory[i] = front.rsNode.V2 & 0b11111111;
-                                   // std::cerr<<"mem["<<i<<"]"<<int(memory[i])<<std::endl;
+                                    // std::cerr<<"mem["<<i<<"]"<<int(memory[i])<<std::endl;
                                     front.rsNode.V2 >>= 8;
                                 }
                                 break;
@@ -866,7 +870,7 @@ public:
         if (exResult.hasResult) {
             slBuffer.traverse(exResult.posROB, exResult.value);
         }
-        if (slBuffer.hasResult && !slBuffer.isStore)  {
+        if (slBuffer.hasResult && !slBuffer.isStore) {
             slBuffer.traverse(slBuffer.posROB, slBuffer.value);
         }
         SLBuffer_is_stall = slBuffer.isFull();
@@ -921,7 +925,7 @@ public:
                 cout<<"Daweaweawesdqwa\n";*/
 /*            if (channelToRegfile.commit_rd==13 && regNext.reg[channelToRegfile.commit_rd]==400673)
                 std::cout<<"waeaweaweqa\n";*/
-  //         cout<<std::dec<<"reg["<<channelToRegfile.commit_rd<<"] "<<regNext.reg[channelToRegfile.commit_rd]<<std::hex<<std::endl;
+            //         cout<<std::dec<<"reg["<<channelToRegfile.commit_rd<<"] "<<regNext.reg[channelToRegfile.commit_rd]<<std::hex<<std::endl;
             if (regNext.Q[channelToRegfile.commit_rd] == channelToRegfile.id)regNext.Q[channelToRegfile.commit_rd] = 0;
         }
         if (channelToRegfile.issue_rd != -1) regNext.Q[channelToRegfile.issue_rd] = channelToRegfile.issue_pos;
@@ -952,11 +956,26 @@ public:
                 commit_flag = true;
                 code_from_rob_to_commit = tmp.origin_code;
                 if (tmp.isJump) {
-                    if (tmp.predict_pc==tmp.npc) {
-                        ++predict[HASH(tmp.prePc)];
-                        predict[HASH(tmp.prePc)]&=0b11;
+                    if (tmp.predict_pc == tmp.npc) {
+                        ++predict_correct;
+                        if (tmp.predict_pc==tmp.prePc+4) {
+                            //predict not jump and correct
+                            if (predict[HASH(tmp.prePc)]) --predict[HASH(tmp.prePc)];
+                        } else {
+                            //predict jump and correct
+                            ++predict[HASH(tmp.prePc)];
+                            predict[HASH(tmp.prePc)] &= 0b11;
+                        }
                     } else {
-                        if (predict[HASH(tmp.prePc)]) --predict[HASH(tmp.prePc)];
+                        ++predict_fail;
+                        if (tmp.predict_pc==tmp.prePc+4) {
+                            //predict not jump and fail
+                            ++predict[HASH(tmp.prePc)];
+                            predict[HASH(tmp.prePc)] &= 0b11;
+                        } else {
+                            //predict jump and fail
+                            if (predict[HASH(tmp.prePc)]) --predict[HASH(tmp.prePc)];
+                        }
                     }
                 }
                 if (tmp.isJump && tmp.predict_pc != tmp.npc) {
@@ -998,7 +1017,7 @@ public:
 
     ~simulator() {
         delete[] memory;
-        while (vec_basePtr.getStatus()!=-1) {
+        while (vec_basePtr.getStatus() != -1) {
             delete vec_basePtr.getFront();
             vec_basePtr.pop();
         }
