@@ -229,19 +229,6 @@ public:
             return false;
         }
 
-#ifdef debugs
-
-        void list() {
-            for (int j = 0; j < QUEUE_SIZE; ++j)
-                if (preBuffer.rsQue[j].busy) {
-                    cout << std::dec << j << ' ' << preBuffer.rsQue[j].Q1 << ' ' << preBuffer.rsQue[j].V1 << ' '
-                         << preBuffer.rsQue[j].Q2 << ' ' << preBuffer.rsQue[j].V2 << ' '
-                         << preBuffer.rsQue[j].id << ' ' << preBuffer.rsQue[j].opPtr->opType << std::hex << std::endl;
-                }
-        }
-
-#endif
-
         void update() { preBuffer = nextBuffer; }
 
         void insert(const RS_Node &rsNode) {
@@ -428,8 +415,9 @@ private:
 
     loopQueue<baseOperator *, 1000> vec_basePtr;
 
-    char predict[4096],history[4096];
+    char predict[4096], history[4096];
     bool predictTable[4096][4];
+
     unsigned int HASH(unsigned int pc) { return (pc >> 2) & 0xfff; }
 
 public:
@@ -439,10 +427,9 @@ public:
         reserve_origin_code = 0;
         memset(memory, 0, sizeof(memory));
         for (int i = 0; i < 4096; ++i) predict[i] = 1;
-        memset(predictTable,0,sizeof(predictTable));
         for (int i = 0; i < 4096; ++i)
-            for (int j = 0; j < 4; ++j) predictTable[i][j] = 1;
-        memset(history,0, sizeof(history));
+            for (int j = 0; j < 3; ++j) predictTable[i][j]=1;
+        memset(history, 0, sizeof(history));
     }
 
     void scan() {
@@ -461,8 +448,6 @@ public:
     }
 
     unsigned int cycle = 0;
-    unsigned int reg_count = 0;
-    unsigned int mem_count = 0;
 
     void run() {
         while (true) {
@@ -476,8 +461,11 @@ public:
             if (code_from_rob_to_commit == 0x0ff00513) {
                 std::cout << std::dec << ((unsigned int) regPre[10] & 255u) << std::endl;
                 std::cout << std::dec << ((unsigned int) cycle) << std::endl;
-                std::cout << std::dec << ((unsigned int) predict_correct)<<"/" << ((unsigned int) predict_fail)  << std::endl;
-                std::cout << std::dec << ((predict_fail==0)?1:((double) predict_correct/(predict_correct+predict_fail))) << std::endl;
+                std::cout << std::dec << ((unsigned int) predict_correct) << "/" << ((unsigned int) predict_fail)
+                          << std::endl;
+                std::cout << std::dec
+                          << ((predict_fail == 0) ? 1 : ((double) predict_correct / (predict_correct + predict_fail)))
+                          << std::endl;
                 break;
             }
             run_slbuffer();
@@ -515,7 +503,7 @@ public:
                 unsigned int immediate =
                         (command[31] * ((1 << 20) - 1) << 12) + (command[7] << 11) + (command.slice(25, 30) << 5) +
                         (command.slice(8, 11) << 1);
-                next_pc = (predictTable[HASH(pc)][history[HASH(pc)]]) ?pc + immediate: pc + 4;
+                next_pc = (predictTable[HASH(pc)][history[HASH(pc)]]) ? pc + immediate : pc + 4;
             } else next_pc = pc + 4;
             nextFetchQue.push({(unsigned int) command, next_pc, pc});
         }
@@ -541,24 +529,6 @@ public:
             binaryManager command;
             command.setValue(preFetchQue.getFront().first);
             issueResult.code = command;
-            //   std::cout << "(" << std::hex << preFetchQue.getFront().third << ' ' << (unsigned int) command<<")"<<std::dec<<std::endl;
-/*            if (preFetchQue.getFront().third == 4164)
-                cout << "waeaweaw\n";
-            std::cout << std::hex << preFetchQue.getFront().third << ' ' << (unsigned int) command << ' ' << regPre[1] << ' ' << regPre[2] << ' '
-                      << regPre[10] << ' ' << regPre[15] << ' ' << regPre[14] << std::endl;
-            if (!rob.isEmpty())
-                std::cout << "ROB: " << rob.getFront().origin_code << ' ' << rob.getFront().value << ' '
-                          << rob.getFront().hasValue << ' ' << rob.getFront().id << std::endl;
-            std::cout << rob.getSize() << ' ' << rob.isFull() << std::endl;
-            std::cout << "RS List: " << std::endl;
-            rs.list();
-            if (slBuffer.preQue.getStatus() != -1)
-                std::cout << "SLB: " << int(slBuffer.preQue.getFront().exCount) << ' '
-                          << slBuffer.preQue.getFront().ready() << ' ' << slBuffer.preQue.getFront().rsNode.Q1 << ' '
-                          << slBuffer.preQue.getFront().rsNode.Q2 << ' ' << slBuffer.preQue.getFront().hasCommit << ' '
-                          << slBuffer.preQue.getFront().rsNode.id << ' ' << slBuffer.preQue.getFront().rsNode.V2 << ' '
-                          << slBuffer.preQue.getFront().rsNode.origin_code << std::endl;
-            std::cout << "---------------------------------\n";*/
             fetch_flag = true;
             //ID
             bool illegal_command = false;
@@ -803,30 +773,18 @@ public:
                             case 0:
                                 //SB
                                 memory[st] = (front.rsNode.V2 & 0b11111111);
-                                ++mem_count;/*
-                                if (mem_count==251)
-                                    std::cout<<"Waeaweawe\n";*/
-                                //std::cerr<<"mem["<<st<<"]"<<int(memory[st])<<std::endl;
                                 break;
                             case 1:
                                 //SH
                                 for (int i = st; i < st + 2; ++i) {
                                     memory[i] = front.rsNode.V2 & 0b11111111;
-                                    ++mem_count;/*
-                                    if (mem_count==251)
-                                        std::cout<<"Waeaweawe\n";*/
-                                    //std::cerr<<"mem["<<i<<"]"<<int(memory[i])<<std::endl;
                                     front.rsNode.V2 >>= 8;
                                 }
                                 break;
                             case 2:
                                 //SW
                                 for (int i = st; i < st + 4; ++i) {
-                                    ++mem_count;/*
-                                    if (mem_count==251)
-                                        std::cout<<"Waeaweawe\n";*/
                                     memory[i] = front.rsNode.V2 & 0b11111111;
-                                    // std::cerr<<"mem["<<i<<"]"<<int(memory[i])<<std::endl;
                                     front.rsNode.V2 >>= 8;
                                 }
                                 break;
@@ -925,11 +883,6 @@ public:
         */
         if (channelToRegfile.commit_rd != -1) {
             regNext.reg[channelToRegfile.commit_rd] = channelToRegfile.commit_value;
-/*            if (channelToRegfile.commit_rd==18 && regNext.reg[channelToRegfile.commit_rd]== 131048)
-                cout<<"Daweaweawesdqwa\n";*/
-/*            if (channelToRegfile.commit_rd==13 && regNext.reg[channelToRegfile.commit_rd]==400673)
-                std::cout<<"waeaweaweqa\n";*/
-            //         cout<<std::dec<<"reg["<<channelToRegfile.commit_rd<<"] "<<regNext.reg[channelToRegfile.commit_rd]<<std::hex<<std::endl;
             if (regNext.Q[channelToRegfile.commit_rd] == channelToRegfile.id)regNext.Q[channelToRegfile.commit_rd] = 0;
         }
         if (channelToRegfile.issue_rd != -1) regNext.Q[channelToRegfile.issue_rd] = channelToRegfile.issue_pos;
@@ -946,12 +899,7 @@ public:
         commit_flag = false;
         if (!rob.isEmpty()) {
             ROB_Node tmp = rob.getFront();
-            if (tmp.hasValue) {/*
-                if (tmp.isJump) {
-                    if (tmp.origin_code == 0X8067)
-                        cout<<"Awedawedaw";
-                    cout<<std::hex<<"***"<<tmp.origin_code<<" "<<(tmp.predict_pc==tmp.npc)<<"***"<<std::dec<<std::endl;
-                }*/
+            if (tmp.hasValue) {
                 commit_to_SLB = tmp.isStore;
                 commit_to_SLB_id = tmp.id;
                 channelToRegfile.commit_rd = tmp.linkToReg;
@@ -960,9 +908,9 @@ public:
                 commit_flag = true;
                 code_from_rob_to_commit = tmp.origin_code;
                 if (tmp.isJump) {
-                    predictTable[HASH(tmp.prePc)][history[HASH(tmp.prePc)]]=(tmp.predict_pc!=tmp.prePc+4);
-                    history[HASH(tmp.prePc)]=(history[HASH(tmp.prePc)]<<1)|(tmp.predict_pc!=tmp.prePc+4);
-                    history[HASH(tmp.prePc)]&=0b11;
+                    predictTable[HASH(tmp.prePc)][history[HASH(tmp.prePc)]] = (tmp.npc != tmp.prePc + 4);
+                    history[HASH(tmp.prePc)] = (history[HASH(tmp.prePc)] << 1) | (tmp.npc != tmp.prePc + 4);
+                    history[HASH(tmp.prePc)] &= 0b11;
                     if (tmp.predict_pc == tmp.npc) ++predict_correct;
                     else ++predict_fail;
                 }
