@@ -416,9 +416,9 @@ private:
     loopQueue<baseOperator *, 1000> vec_basePtr;
 
     char predict[4096], history[4096];
-    bool predictTable[4096][4];
+    char predictTable[4096][4];
 
-    unsigned int HASH(unsigned int pc) { return (pc >> 2) & 0xfff; }
+    unsigned int HASH(unsigned int pc) { return ((pc>>12)^(pc >> 2)) & 0xfff; }
 
 public:
     simulator() : pc(0), next_pc(0), memory(new unsigned char[mem_size]), predict_correct(0), predict_fail(0) {
@@ -428,7 +428,7 @@ public:
         memset(memory, 0, sizeof(memory));
         for (int i = 0; i < 4096; ++i) predict[i] = 1;
         for (int i = 0; i < 4096; ++i)
-            for (int j = 0; j < 3; ++j) predictTable[i][j]=1;
+            for (int j = 0; j < 3; ++j) predictTable[i][j]=2;
         memset(history, 0, sizeof(history));
     }
 
@@ -503,7 +503,7 @@ public:
                 unsigned int immediate =
                         (command[31] * ((1 << 20) - 1) << 12) + (command[7] << 11) + (command.slice(25, 30) << 5) +
                         (command.slice(8, 11) << 1);
-                next_pc = (predictTable[HASH(pc)][history[HASH(pc)]]) ? pc + immediate : pc + 4;
+                next_pc = (predictTable[HASH(pc)][history[HASH(pc)]]>=2) ? pc + immediate : pc + 4;
             } else next_pc = pc + 4;
             nextFetchQue.push({(unsigned int) command, next_pc, pc});
         }
@@ -821,7 +821,6 @@ public:
                         slBuffer.newIsStore = false;
                         slBuffer.newHasResult = true;
                     }
-
                     slBuffer.newPosROB = front.rsNode.id;
                     slBuffer.pop();
                 } else slBuffer.nextQue.getFront() = front;
@@ -907,8 +906,12 @@ public:
                 channelToRegfile.id = tmp.id;
                 commit_flag = true;
                 code_from_rob_to_commit = tmp.origin_code;
-                if (tmp.isJump) {
-                    predictTable[HASH(tmp.prePc)][history[HASH(tmp.prePc)]] = (tmp.npc != tmp.prePc + 4);
+                if (binaryManager(tmp.origin_code).slice(0,6)==99) {
+                    if (tmp.npc != tmp.prePc + 4) {
+                        if (predictTable[HASH(tmp.prePc)][history[HASH(tmp.prePc)]]<3)
+                            ++predictTable[HASH(tmp.prePc)][history[HASH(tmp.prePc)]];
+                    } else if (predictTable[HASH(tmp.prePc)][history[HASH(tmp.prePc)]])
+                        --predictTable[HASH(tmp.prePc)][history[HASH(tmp.prePc)]];
                     history[HASH(tmp.prePc)] = (history[HASH(tmp.prePc)] << 1) | (tmp.npc != tmp.prePc + 4);
                     history[HASH(tmp.prePc)] &= 0b11;
                     if (tmp.predict_pc == tmp.npc) ++predict_correct;
