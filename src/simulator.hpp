@@ -350,12 +350,6 @@ public:
             }
             nextQue.clear();
             for (int i = 0; i < vec_slbuffer.size(); ++i) nextQue.push(vec_slbuffer[i]);
-            /*
-            bool flag = nextQue.getStatus() == -1;
-            SLBufferNode tmp;
-            if (!flag) tmp = nextQue.getFront();
-            nextQue.clear();
-            if (!flag && tmp.ready()) nextQue.push(tmp);*/
             preQue = nextQue;
         }
     };
