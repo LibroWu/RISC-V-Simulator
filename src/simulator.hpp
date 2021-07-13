@@ -397,8 +397,8 @@ private:
     //switches
     bool RS_is_stall, SLBuffer_is_stall, commit_flag, reserve_flag, reserve_isJump, reserve_isStore;
     bool fetch_flag, ROB_is_stall, commit_to_SLB;
-    bool issue_to_ex_flag;
-    RS_Node issue_to_ex_node;
+    bool issue_to_ex_flag, new_issue_to_ex_flag;
+    RS_Node issue_to_ex_node, new_issue_to_ex_node;
 
     IssueResult issueResult;
     ExResult exResult;
@@ -412,17 +412,17 @@ private:
     char predict[4096], history[4096];
     char predictTable[4096][4];
 
-    unsigned int HASH(unsigned int pc) { return ((pc>>12)^(pc >> 2)) & 0xfff; }
+    unsigned int HASH(unsigned int pc) { return ((pc >> 12) ^ (pc >> 2)) & 0xfff; }
 
 public:
     simulator() : pc(0), next_pc(0), memory(new unsigned char[mem_size]), predict_correct(0), predict_fail(0) {
         RS_is_stall = ROB_is_stall = SLBuffer_is_stall = false;
-        issue_to_ex_flag = commit_flag = commit_to_SLB = reserve_flag = reserve_isStore = reserve_isJump = fetch_flag = false;
+        new_issue_to_ex_flag = issue_to_ex_flag = commit_flag = commit_to_SLB = reserve_flag = reserve_isStore = reserve_isJump = fetch_flag = false;
         reserve_origin_code = 0;
         memset(memory, 0, sizeof(memory));
         for (int i = 0; i < 4096; ++i) predict[i] = 1;
         for (int i = 0; i < 4096; ++i)
-            for (int j = 0; j < 3; ++j) predictTable[i][j]=2;
+            for (int j = 0; j < 3; ++j) predictTable[i][j] = 2;
         memset(history, 0, sizeof(history));
     }
 
@@ -472,8 +472,8 @@ public:
             run_inst_fetch_queue();
             update();
 
-            run_ex();
             run_issue();
+            run_ex();
             run_commit();
         }
     }
@@ -501,7 +501,7 @@ public:
                 unsigned int immediate =
                         (command[31] * ((1 << 20) - 1) << 12) + (command[7] << 11) + (command.slice(25, 30) << 5) +
                         (command.slice(8, 11) << 1);
-                next_pc = (predictTable[HASH(pc)][history[HASH(pc)]]>=2) ? pc + immediate : pc + 4;
+                next_pc = (predictTable[HASH(pc)][history[HASH(pc)]] >= 2) ? pc + immediate : pc + 4;
             } else next_pc = pc + 4;
             nextFetchQue.push({(unsigned int) command, next_pc, pc});
         }
@@ -649,13 +649,13 @@ public:
                 reserve_link_to_reg = (rd == 0) ? -1 : rd;
                 reserve_isJump = (opcode == 99 || opcode == 103);
                 reserve_predict_pc = preFetchQue.getFront().second;
-                issue_to_ex_flag = false;
+                new_issue_to_ex_flag = false;
                 issueResult.rsNode.origin_code = reserve_origin_code;
                 if (issueResult.toRS && issueResult.rsNode.canEx()) {
                     //send to ex directly
                     issueResult.hasResult = false;
-                    issue_to_ex_flag = true;
-                    issue_to_ex_node = issueResult.rsNode;
+                    new_issue_to_ex_flag = true;
+                    new_issue_to_ex_node = issueResult.rsNode;
                 }
                 //may not happen
                 if (issueResult.toRS && RS_is_stall || issueResult.toSLBuffer && SLBuffer_is_stall) {
@@ -680,9 +680,9 @@ public:
             rs.insert(issueResult.rsNode);
         }
         rs.exFlag = rs.scan();
-        if (rs.exFlag && issue_to_ex_flag) {
-            rs.insert(issue_to_ex_node);
-            issue_to_ex_flag = false;
+        if (rs.exFlag && new_issue_to_ex_flag) {
+            rs.insert(new_issue_to_ex_node);
+            new_issue_to_ex_flag = false;
         }
         //todo update with the result of ex or slbuffer
         if (exResult.hasResult) {
@@ -904,9 +904,9 @@ public:
                 channelToRegfile.id = tmp.id;
                 commit_flag = true;
                 code_from_rob_to_commit = tmp.origin_code;
-                if (binaryManager(tmp.origin_code).slice(0,6)==99) {
+                if (binaryManager(tmp.origin_code).slice(0, 6) == 99) {
                     if (tmp.npc != tmp.prePc + 4) {
-                        if (predictTable[HASH(tmp.prePc)][history[HASH(tmp.prePc)]]<3)
+                        if (predictTable[HASH(tmp.prePc)][history[HASH(tmp.prePc)]] < 3)
                             ++predictTable[HASH(tmp.prePc)][history[HASH(tmp.prePc)]];
                     } else if (predictTable[HASH(tmp.prePc)][history[HASH(tmp.prePc)]])
                         --predictTable[HASH(tmp.prePc)][history[HASH(tmp.prePc)]];
@@ -917,6 +917,7 @@ public:
                 }
                 if (tmp.isJump && tmp.predict_pc != tmp.npc) {
                     issueResult.hasResult = false;
+                    new_issue_to_ex_flag = false;
                     issue_to_ex_flag = false;
                     reserve_flag = reserve_isStore = reserve_isJump = false;
                     fetch_flag = false;
@@ -947,6 +948,8 @@ public:
         */
         regPre = regNext;
         preFetchQue = nextFetchQue;
+        issue_to_ex_flag = new_issue_to_ex_flag;
+        issue_to_ex_node = new_issue_to_ex_node;
         rs.update();
         slBuffer.update();
         rob.update();
